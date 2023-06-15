@@ -15,32 +15,6 @@ class SliceableDeque(deque):
         return deque.__getitem__(self, index)
     
 
-class IndexDict:
-    def __init__(self):
-        self.dict = {}
-
-    def __contains__(self, item):
-        return item in self.dict
-    
-    def __getitem__(self, item):
-        return self.dict[item]
-
-    def insert(self, item):
-        if item not in self.dict:
-            self.dict[item] = len(self.dict)
-
-    def indexof(self, item):
-        return self.dict.get(item, -1)
-
-    def replace(self, old_item, new_item):
-        if old_item in self.dict:
-            index = self.dict[old_item]
-            del self.dict[old_item]
-            self.dict[new_item] = index
-        else:
-            raise ValueError(f"Item {old_item} not found in dictionary")
-    
-
 def random_split_dict(d, num_splits):
     """Randomly split the dict into `num_splits` parts."""
     keys = list(d.keys())
