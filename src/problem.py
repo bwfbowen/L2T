@@ -141,7 +141,7 @@ class MultiODProblem(Problem):
         feasible: bool
         """
         if not isinstance(solution, MultiODSolution):
-            solution = MultiODSolution(solution)
+            solution = MultiODSolution(solution, self)
         feasible = solution._is_valid
         if not feasible: return False  
         for path in solution:
