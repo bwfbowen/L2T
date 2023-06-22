@@ -45,6 +45,9 @@ class Problem:
     def is_feasible(self, solution: solution.Solution):
         pass
 
+    def calc_cost(self, solution: solution.Solution):
+        pass 
+
     def __repr__(self):
       return f'{type(self).__name__}(nodes={len(self.locations)})'
 
@@ -166,4 +169,19 @@ class MultiODProblem(Problem):
         if self.is_feasible(sol):
             return sol 
 
-
+    def calc_cost(self, solution: MultiODSolution):
+        cost = 0.
+        for path in solution.paths:
+            cost += self.calc_cost_for_single_path(path)
+        return cost 
+    
+    def calc_cost_for_single_path(self, path):
+        cost = 0.
+        if isinstance(path, solution.MultiODPath):
+            p = [node for node in path]
+            for idx in range(len(p) - 1):
+                cost += path.get_distance_by_node_ids(p[idx], p[idx + 1])
+        else:
+            for idx in range(len(path) - 1):
+                cost += self.distance_matrix[path[idx], path[idx + 1]]
+        return cost
