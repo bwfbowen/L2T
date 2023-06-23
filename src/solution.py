@@ -286,17 +286,7 @@ class MultiODSolution(Solution):
         prev_is_different = (prev_is_none) or (node.prev_node.OD_type != node.OD_type)
         next_is_different = (next_is_none) or (node.next_node.OD_type != node.OD_type)
         if prev_is_different and next_is_different:
-                if not prev_is_none and not next_is_none:
-                    original_block = path.block_dict[node.prev_node.block_id]
-                    path.block_dict[node.prev_node.block_id] = SliceableDeque(original_block[:node.in_block_seq_id])
-                    self._create_new_block_after_swap(path, node)
-                    path._block_id += 1
-                    path.block_dict[path._block_id] = SliceableDeque(original_block[node.in_block_seq_id:])
-                    for idx, node in enumerate(original_block[node.in_block_seq_id:]):
-                        node.block_id = path._block_id
-                        node.in_block_seq_id = idx 
-                else:
-                    self._create_new_block_after_swap(path, node)
+            self._create_new_block_after_swap(path, node)
         elif prev_is_different and not next_is_different:
             # node.next_node has the same OD type as node's if node.next_node is not None
             # insert node at the beginning of node.next_node's block 
@@ -321,11 +311,21 @@ class MultiODSolution(Solution):
             node.in_block_seq_id = in_seq_id
 
     def _remove_and_update_path_block_attrs(self, path: MultiODPath, node: Node):
-        path.block_dict[node.block_id].remove(node)
+        original_block = path.block_dict[node.block_id]
+        path.block_dict[node.block_id] = original_block[:node.in_block_seq_id]
         self._update_in_block_seq_id(path, node.block_id)
         if not path.block_dict[node.block_id]:
             del path.block_dict[node.block_id]
             path._remove_id_from_OD_blocks(node.block_id, node.OD_type)
+        second_half = original_block[node.in_block_seq_id + 1:]
+        if len(second_half) > 0:
+            path._block_id += 1
+            new_block_id = path._block_id
+            path.block_dict[new_block_id] = SliceableDeque(second_half)
+            for idx, node in enumerate(second_half):
+                node.block_id = new_block_id
+                node.in_block_seq_id = idx 
+            path._append_id_to_OD_blocks(new_block_id, node.OD_type)
 
     def _create_new_block_after_swap(self, path: MultiODPath, node: Node):
         path._block_id += 1 

@@ -118,7 +118,6 @@ class ExchangeOperator(Operator):
                 + path.get_distance_by_node_ids(node1.node_id, next2)
             )
         delta = after - before
-        # print(f'node1 seq: {first}, node2 seq: {second}, delta: {delta}')
         if delta < min_delta:
             min_delta = delta
             label = node1.node_id, node2.node_id
