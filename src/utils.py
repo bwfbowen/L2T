@@ -78,3 +78,4 @@ def display_result(problem, solution,
             plt.annotate(f'O{idx}', (x[i], y[i]))
         for idx, i in enumerate(problem.D, start=1):
             plt.annotate(f'D{idx}', (x[i], y[i]))
+    return fig 

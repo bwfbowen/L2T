@@ -159,13 +159,13 @@ class MultiODProblem(Problem):
                     return False 
         return True
     
-    def generate_feasible_solution(self):
+    def generate_feasible_solution(self, *args):
         """Generates a random feasible solution(for subsequent optimization)"""
         ODs = random_split_dict(self.OD_mapping, self.num_taxi)
         taxi_ids = [*range(1, 1 + self.num_taxi)]
         random.shuffle(taxi_ids)
         paths = [[0, taxi_ids[i]] + generate_random_list_from_dict_with_key_before_value(OD, OD.keys()) + [0] for i, OD in enumerate(ODs)]
-        sol = solution.MultiODSolution(paths)
+        sol = solution.MultiODSolution(paths, self)
         if self.is_feasible(sol):
             return sol 
 
