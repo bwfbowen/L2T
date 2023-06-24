@@ -5,7 +5,9 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="bd25c95a-2e9c-4875-95a0-088147ff2fb2" name="Changes" comment="">
-      <change beforePath="$PROJECT_DIR$/src/stable_baselines3/agent.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/stable_baselines3/agent.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/src/coax/__init__.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/src/coax/agent.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
