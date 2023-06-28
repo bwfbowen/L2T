@@ -5,14 +5,10 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="bd25c95a-2e9c-4875-95a0-088147ff2fb2" name="Changes" comment="">
-      <change afterPath="$PROJECT_DIR$/.ipynb_checkpoints/test_env-checkpoint.ipynb" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/src/reinforcement_learning/stable_baselines3/__init__.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/coax/__init__.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/reinforcement_learning/__init__.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/coax/agent.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/reinforcement_learning/coax/agent.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/stable_baselines3/__init__.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/reinforcement_learning/coax/__init__.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/stable_baselines3/agent.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/reinforcement_learning/stable_baselines3/agent.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/test_env.ipynb" beforeDir="false" afterPath="$PROJECT_DIR$/test_env.ipynb" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/reinforcement_learning/__init__.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/reinforcement_learning/__init__.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/reinforcement_learning/coax/__init__.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/reinforcement_learning/coax/__init__.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/reinforcement_learning/stable_baselines3/__init__.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/reinforcement_learning/stable_baselines3/__init__.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -67,6 +63,11 @@
     &quot;vue.rearranger.settings.migration&quot;: &quot;true&quot;
   }
 }</component>
+  <component name="RecentsManager">
+    <key name="MoveFile.RECENT_KEYS">
+      <recent name="$PROJECT_DIR$/src/reinforcement_learning" />
+    </key>
+  </component>
   <component name="SpellCheckerSettings" RuntimeDictionaries="0" Folders="0" CustomDictionaries="0" DefaultDictionary="application-level" UseSingleDictionary="true" transferred="true" />
   <component name="TaskManager">
     <task active="true" id="Default" summary="Default task">
@@ -82,7 +83,7 @@
       <workItem from="1687050324664" duration="1047000" />
       <workItem from="1687139878247" duration="1408000" />
       <workItem from="1687446176029" duration="176000" />
-      <workItem from="1687922979910" duration="1196000" />
+      <workItem from="1687922979910" duration="3248000" />
     </task>
     <task id="LOCAL-00001" summary="Implemented reinforcement learning framework based on stable baseline3">
       <created>1687627299481</created>
@@ -91,7 +92,14 @@
       <option name="project" value="LOCAL" />
       <updated>1687627299481</updated>
     </task>
-    <option name="localTasksCounter" value="2" />
+    <task id="LOCAL-00002" summary="created a parent package for reinforcement learning module">
+      <created>1687924982447</created>
+      <option name="number" value="00002" />
+      <option name="presentableId" value="LOCAL-00002" />
+      <option name="project" value="LOCAL" />
+      <updated>1687924982447</updated>
+    </task>
+    <option name="localTasksCounter" value="3" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -100,6 +108,7 @@
   <component name="VcsManagerConfiguration">
     <option name="ADD_EXTERNAL_FILES_SILENTLY" value="true" />
     <MESSAGE value="Implemented reinforcement learning framework based on stable baseline3" />
-    <option name="LAST_COMMIT_MESSAGE" value="Implemented reinforcement learning framework based on stable baseline3" />
+    <MESSAGE value="created a parent package for reinforcement learning module" />
+    <option name="LAST_COMMIT_MESSAGE" value="created a parent package for reinforcement learning module" />
   </component>
 </project>
