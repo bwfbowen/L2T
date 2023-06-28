@@ -60,5 +60,6 @@ class PathAction(Action):
     
     def _update(self, solution: MultiODSolution, path_id: int = 0):
         improved_path, delta, label = self.operator(solution=solution, path_id=path_id)
+        # print(label)
         modified = True if label else False
         return improved_path, delta, modified
