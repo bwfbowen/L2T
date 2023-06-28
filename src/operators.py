@@ -88,6 +88,7 @@ class ExchangeOperator(Operator):
     label = None
     for second in range(start, end):
         node2: Node = path.get_by_seq_id(second)
+        # print(f'node1: {node1.node_id}, {node1.OD_type}; node2: {node2.node_id}, {node2.OD_type}')
         od2 = node2.OD_type
         if od2 == 1 and (o2 := path.get_by_node_id(path.DO_mapping[node2.node_id])).seq_id > node1.seq_id:
             continue  
