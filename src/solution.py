@@ -238,8 +238,8 @@ class MultiODSolution(Solution):
             node1.in_block_seq_id, node2.in_block_seq_id = node2.in_block_seq_id, node1.in_block_seq_id
             path.block_dict[node1.block_id][node1.in_block_seq_id], path.block_dict[node2.block_id][node2.in_block_seq_id] = node1, node2
         else:
-            self._remove_and_update_path_block_attrs(path, node1)
-            self._remove_and_update_path_block_attrs(path, node2)
+            self._remove_and_update_path_block_attrs_after_swap_different_OD(path, node1)
+            self._remove_and_update_path_block_attrs_after_swap_different_OD(path, node2)
 
             # Here swap the in_block_seq_id of node1 and node2 for slicing the block in the `_reassign_block_attrs_after_swap` function.
             node1.in_block_seq_id, node2.in_block_seq_id = node2.in_block_seq_id, node1.in_block_seq_id
@@ -251,6 +251,24 @@ class MultiODSolution(Solution):
             self._reassign_block_attrs_after_swap_different_OD(path, node1)
         
         return path
+    
+    def insert_within_path(self, node_id: int, target_seq_id: int, path_id: int = 0, path: MultiODPath = None):
+        """path_id is the index of path in the self.paths. If path is not None, arg path will be used."""
+        if path is None:
+            path = self.paths[path_id]
+        node: Node = path.get_by_node_id(node_id)
+        # store original seq_id
+        origin_seq_id = node.seq_id
+        if origin_seq_id != target_seq_id:
+            self._reassign_block_attrs_before_insert(path, node)
+            self._insert_prev_next_within_path(node, target_seq_id, path)
+            self._update_seq_attr_insert(node, target_seq_id, path)
+
+            # Handle the block attributes
+            self._remove_and_update_path_block_attrs_after_insert(path, node)
+            self._reassign_block_attrs_after_insert(path, node)
+
+        return path 
     
     def _swap_seq_id_within_path(self, path: MultiODPath, node1: Node, node2: Node):
         node1.seq_id, node2.seq_id = node2.seq_id, node1.seq_id
@@ -280,21 +298,43 @@ class MultiODSolution(Solution):
             if node2_prev is not None: node2_prev.next_node = node1 
             if node2_next is not None: node2_next.prev_node = node1 
     
+    def _insert_prev_next_within_path(self, node: Node, target_seq_id: int, path: MultiODPath):
+        origin_seq_id = node.seq_id
+        if node.prev_node is not None: node.prev_node.next_node = node.next_node
+        if node.next_node is not None: node.next_node.prev_node = node.prev_node
+
+        current_target_node = path.get_by_seq_id(target_seq_id)
+        if origin_seq_id < target_seq_id:
+            if target_seq_id == len(path.seq_dict):
+                target_node_next = None 
+            else:
+                target_node_next = path.get_by_seq_id(target_seq_id + 1)
+                target_node_next.prev_node = node 
+            current_target_node.next_node = node
+            node.prev_node = current_target_node
+            node.next_node = target_node_next
+        elif origin_seq_id > target_seq_id:
+            target_node_prev = path.get_by_seq_id(target_seq_id - 1)
+            target_node_prev.next_node = node 
+            current_target_node.prev_node = node 
+            node.prev_node = target_node_prev
+            node.next_node = current_target_node
+    
     def _reassign_block_attrs_after_swap_different_OD(self, path: MultiODPath, node: Node):
         prev_is_none = node.prev_node is None or node.prev_node.block_id is None  # taxi node
         next_is_none = node.next_node is None or node.next_node.block_id is None 
         prev_is_different = (prev_is_none) or (node.prev_node.OD_type != node.OD_type)
         next_is_different = (next_is_none) or (node.next_node.OD_type != node.OD_type)
         if prev_is_different and next_is_different:
-            self._create_new_block_after_swap(path, node)
+            self._create_new_block(path, node)
         elif prev_is_different and not next_is_different:
             # node.next_node has the same OD type as node's if node.next_node is not None
             # insert node at the beginning of node.next_node's block 
             self._appendleft_node_to_next_block(path, node, node.next_node.block_id)  
         elif not prev_is_different and next_is_different:
-                node.block_id = node.prev_node.block_id
-                node.in_block_seq_id = node.prev_node.in_block_seq_id + 1
-                path.block_dict[node.prev_node.block_id].append(node)
+            node.block_id = node.prev_node.block_id
+            node.in_block_seq_id = node.prev_node.in_block_seq_id + 1
+            path.block_dict[node.prev_node.block_id].append(node)
         else:
             # merge blocks
             merge_block_id = node.prev_node.block_id
@@ -305,12 +345,72 @@ class MultiODSolution(Solution):
                 self._append_node_to_prev_block(path, node, merge_block_id)
             del path.block_dict[to_merge_block_id]
     
+    def _reassign_block_attrs_before_insert(self, path: MultiODPath, node: Node):
+        prev_next_not_none = not node.prev_node is None and not node.next_node is None
+        prev_next_same_type_diff_from_node = node.prev_node.OD_type != node.OD_type and node.next_node.OD_type != node.OD_type
+        if prev_next_not_none and prev_next_same_type_diff_from_node:
+            merge_block_id = node.prev_node.block_id
+            to_merge_block_id = node.next_node.block_id
+            path._remove_id_from_OD_blocks(to_merge_block_id, node.next_node.OD_type)
+            for node in path.block_dict[to_merge_block_id]:
+                self._append_node_to_prev_block(path, node, merge_block_id)
+            del path.block_dict[to_merge_block_id]
+    
+    def _reassign_block_attrs_after_insert(self, path: MultiODPath, node: Node):
+        prev_is_none = node.prev_node is None or node.prev_node.block_id is None  # taxi node
+        next_is_none = node.next_node is None or node.next_node.block_id is None 
+        prev_is_different = (prev_is_none) or (node.prev_node.OD_type != node.OD_type)
+        next_is_different = (next_is_none) or (node.next_node.OD_type != node.OD_type)
+        if prev_is_different and next_is_different:
+            self._create_new_block(path, node)
+            if not prev_is_none and not next_is_none:
+                # Divide block
+                next_node = node.next_node
+                divide_block_id = next_node.block_id
+                divide_block = path.block_dict[divide_block_id]
+                path.block_dict[divide_block_id] = divide_block[:next_node.in_block_seq_id]
+                second_half = divide_block[next_node.in_block_seq_id:]
+                self._create_new_block_from_half(path, second_half)
+        elif prev_is_different and not next_is_different:
+            # node.next_node has the same OD type as node's if node.next_node is not None
+            # insert node at the beginning of node.next_node's block 
+            self._appendleft_node_to_next_block(path, node, node.next_node.block_id)
+        elif not prev_is_different and next_is_different:
+            node.block_id = node.prev_node.block_id
+            node.in_block_seq_id = node.prev_node.in_block_seq_id + 1
+            path.block_dict[node.prev_node.block_id].append(node)
+        else:
+            # Insert into an existing block of the same type as node
+            insert_block_id = node.prev_node.block_id
+            insert_in_block_seq_id = node.prev_node.in_block_seq_id + 1
+            self._insert_node_to_block(path, node, insert_block_id, insert_in_block_seq_id)
+    
     def _update_in_block_seq_id(self, path: MultiODPath, block_id: int):
         block = path.block_dict[block_id]
         for in_seq_id, node in enumerate(block):
             node.in_block_seq_id = in_seq_id
+    
+    def _update_seq_attr_insert(self, node: Node, target_seq_id: int, path: MultiODPath):
+        origin_seq_id = node.seq_id
+        if origin_seq_id > target_seq_id:
+            # If the node is being moved forward, the nodes in the range (target_seq_id, node.seq_id) 
+            # need to be shifted one position to the right
+            for i in range(origin_seq_id - 1, target_seq_id - 1, -1):
+                shifted_node: Node = path.get_by_seq_id(i)
+                shifted_node.seq_id += 1
+                path.seq_dict[shifted_node.seq_id] = shifted_node
+        elif origin_seq_id < target_seq_id:
+            # If the node is being moved backward, the nodes in the range (node.seq_id, target_seq_id) 
+            # need to be shifted one position to the left
+            for i in range(origin_seq_id + 1, target_seq_id + 1):
+                shifted_node = path.get_by_seq_id(i)
+                shifted_node.seq_id -= 1
+                path.seq_dict[shifted_node.seq_id] = shifted_node
+        
+        node.seq_id = target_seq_id
+        path.seq_dict[target_seq_id] = node 
 
-    def _remove_and_update_path_block_attrs(self, path: MultiODPath, node: Node):
+    def _remove_and_update_path_block_attrs_after_swap_different_OD(self, path: MultiODPath, node: Node):
         original_block = path.block_dict[node.block_id]
         path.block_dict[node.block_id] = original_block[:node.in_block_seq_id]
         self._update_in_block_seq_id(path, node.block_id)
@@ -318,21 +418,32 @@ class MultiODSolution(Solution):
             del path.block_dict[node.block_id]
             path._remove_id_from_OD_blocks(node.block_id, node.OD_type)
         second_half = original_block[node.in_block_seq_id + 1:]
-        if len(second_half) > 0:
-            path._block_id += 1
-            new_block_id = path._block_id
-            path.block_dict[new_block_id] = SliceableDeque(second_half)
-            for idx, node in enumerate(second_half):
-                node.block_id = new_block_id
-                node.in_block_seq_id = idx 
-            path._append_id_to_OD_blocks(new_block_id, node.OD_type)
+        self._create_new_block_from_half(path, second_half)
 
-    def _create_new_block_after_swap(self, path: MultiODPath, node: Node):
+    def _remove_and_update_path_block_attrs_after_insert(self, path: MultiODPath, node: Node):
+        original_block = path.block_dict[node.block_id]
+        path.block_dict[node.block_id] = original_block[:node.in_block_seq_id] + original_block[node.in_block_seq_id + 1:]
+        self._update_in_block_seq_id(path, node.block_id)
+        if not path.block_dict[node.block_id]:
+            del path.block_dict[node.block_id]
+            path._remove_id_from_OD_blocks(node.block_id, node.OD_type)
+
+    def _create_new_block(self, path: MultiODPath, node: Node):
         path._block_id += 1 
         node.block_id = path._block_id
         node.in_block_seq_id = 0
         path.block_dict[node.block_id] = SliceableDeque([node])
         path._append_id_to_OD_blocks(node.block_id, node.OD_type)
+    
+    def _create_new_block_from_half(self, path: MultiODPath, half: SliceableDeque):
+        if len(half) > 0:
+            path._block_id += 1
+            new_block_id = path._block_id
+            path.block_dict[new_block_id] = SliceableDeque(half)
+            for idx, node in enumerate(half):
+                node.block_id = new_block_id
+                node.in_block_seq_id = idx 
+            path._append_id_to_OD_blocks(new_block_id, node.OD_type)
     
     def _append_node_to_prev_block(self, path: MultiODPath, node: Node, merge_block_id: int):
         _in_block_seq_id = len(path.block_dict[merge_block_id])
@@ -345,6 +456,11 @@ class MultiODSolution(Solution):
         path.block_dict[merge_block_id].appendleft(node)
         for _in_block_seq_id, node in enumerate(path.block_dict[merge_block_id]):
             node.in_block_seq_id = _in_block_seq_id
+
+    def _insert_node_to_block(self, path: MultiODPath, node: Node, insert_block_id: int, insert_in_block_seq_id: int):
+        node.block_id = insert_block_id
+        path.block_dict[node.block_id].insert(insert_in_block_seq_id, node)
+        self._update_in_block_seq_id(path, insert_block_id)
     
     def _create_path(self, path, problem=None):
         """Creates `Path` instance from `list` """
