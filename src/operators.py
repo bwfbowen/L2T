@@ -189,7 +189,6 @@ class InsertOperator(Operator):
             
 
 class OForwardOperator(Operator):
-    # TODO
     def __init__(self, length: int = 1):
         super().__init__(operator_type='path')
         self.length = length
@@ -207,7 +206,11 @@ class OForwardOperator(Operator):
         if label is None:
             return None, None, None
         else:
-            improved_path = solution.insert_within_path(label[0], label[1], path=path)
+            target_seq_id = label[1]
+            for seq_id in range(label[0], label[0] + self.length):
+                node_id = path.get_by_seq_id(seq_id).node_id
+                improved_path = solution.insert_within_path(node_id, target_seq_id, path=path)  # Path modified in-place
+                target_seq_id += 1
             return improved_path, min_delta, label 
     
     def _inner_loop(self, node1: Node, node1_tail: Node, path: MultiODPath, start: int, end: int, min_delta=-EPSILON):
@@ -215,67 +218,72 @@ class OForwardOperator(Operator):
         for second in range(start, end):
             node2: Node = path.get_by_seq_id(second)
             prev1 = node1.prev_node.node_id
-            next1 = node1.next_node.node_id if node1.next_node is not None else 0
+            next1_tail = node1_tail.next_node.node_id if node1_tail.next_node is not None else 0
             prev2 = node2.prev_node.node_id
             before = (
                 path.get_distance_by_node_ids(prev1, node1.node_id)
-                + path.get_distance_by_node_ids(node1.node_id, next1)
+                + path.get_distance_by_node_ids(node1_tail.node_id, next1_tail)
                 + path.get_distance_by_node_ids(prev2, node2.node_id)
             )
             after = (
-                path.get_distance_by_node_ids(prev1, next1)
-                + path.get_distance_by_node_ids(node1.node_id, node2.node_id)
+                path.get_distance_by_node_ids(prev1, next1_tail)
+                + path.get_distance_by_node_ids(node1_tail.node_id, node2.node_id)
                 + path.get_distance_by_node_ids(node1.node_id, prev2)
             )
             delta = after - before
-        if delta < min_delta:
-            min_delta = delta 
-            label = node1.node_id, second
+            if delta < min_delta:
+                min_delta = delta 
+                label = node1.seq_id, second
         return min_delta, label
 
 
 class DBackwardOperator(Operator):
-    # TODO
-    def __init__(self):
+    def __init__(self, length: int = 1):
         super().__init__(operator_type='path')
+        self.length = length 
     
     def __call__(self, solution: MultiODSolution, path_id: int = 0, min_delta=-EPSILON):
         path: MultiODPath = solution.paths[path_id]
         n = len(path) - 1
         label = None
         for D_block_id in path.D_blocks:
-            for node1 in path.block_dict[D_block_id]:
-                inner_min_delta, inner_label = self._inner_loop(node1, path, node1.seq_id + 1, n, min_delta)
+            for in_block_seq_id in range(len(path.block_dict[D_block_id]) - self.length + 1):
+                node1, node1_tail = path.block_dict[D_block_id][in_block_seq_id], path.block_dict[D_block_id][in_block_seq_id + self.length - 1]
+                inner_min_delta, inner_label = self._inner_loop(node1, node1_tail, path, node1_tail.seq_id + 1, n, min_delta)
                 if inner_min_delta < min_delta:
                     min_delta = inner_min_delta
                     label = inner_label
         if label is None:
             return None, None, None
-        else:
-            improved_path = solution.insert_within_path(label[0], label[1], path=path)
+        else:            
+            target_seq_id = label[1]
+            for seq_id in range(label[0] + self.length - 1, label[0] - 1, -1):
+                node_id = path.get_by_seq_id(seq_id).node_id
+                improved_path = solution.insert_within_path(node_id, target_seq_id, path=path)
+                target_seq_id -= 1
             return improved_path, min_delta, label 
     
-    def _inner_loop(self, node1: Node, path: MultiODPath, start: int, end: int, min_delta=-EPSILON):
+    def _inner_loop(self, node1: Node, node1_tail: Node, path: MultiODPath, start: int, end: int, min_delta=-EPSILON):
         label, delta = None, 0.
         for second in range(start, end):
             node2: Node = path.get_by_seq_id(second)
             prev1 = node1.prev_node.node_id
-            next1 = node1.next_node.node_id if node1.next_node is not None else 0
+            next1_tail = node1_tail.next_node.node_id if node1_tail.next_node is not None else 0
             next2 = node2.next_node.node_id if node2.next_node is not None else 0
             before = (
                 path.get_distance_by_node_ids(prev1, node1.node_id)
-                + path.get_distance_by_node_ids(node1.node_id, next1)
+                + path.get_distance_by_node_ids(node1_tail.node_id, next1_tail)
                 + path.get_distance_by_node_ids(node2.node_id, next2)
             )
             after = (
-                path.get_distance_by_node_ids(prev1, next1)
+                path.get_distance_by_node_ids(prev1, next1_tail)
                 + path.get_distance_by_node_ids(node1.node_id, node2.node_id)
-                + path.get_distance_by_node_ids(node1.node_id, next2)
+                + path.get_distance_by_node_ids(node1_tail.node_id, next2)
             )
             delta = after - before
-        if delta < min_delta:
-            min_delta = delta 
-            label = node1.node_id, second
+            if delta < min_delta:
+                min_delta = delta 
+                label = node1.seq_id, second
         return min_delta, label
 
 
