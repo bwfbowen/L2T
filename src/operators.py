@@ -377,5 +377,5 @@ class RandomODPairsExchangeOperator(Operator):
                 if pair not in picked_pairs:
                     picked_pairs.add(pair)
                     break
-
+        return
 
