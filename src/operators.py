@@ -288,40 +288,6 @@ class RandomDBackwardOperator(Operator):
     def __init__(self):
         super().__init__(operator_type='path')
 
-# class ODPairsExchangeOperator(Operator):
-#     def __init__(self):
-#         super().__init__(operator_type='path')
-#
-#     def __call__(self, solution: MultiODSolution, path_id: int = 0, min_delta=-EPSILON):
-#         path: MultiODPath = solution.paths[path_id]
-#         original_distance = self._compute_distance(path)
-#         improved_path = None
-#         label = None
-#         for i in range(len(path.O_blocks)):
-#             O1_id = path.O_blocks[i]
-#             D1_id = path.OD_mapping[O1_id]
-#             for j in range(i+1, len(path.O_blocks)):
-#                 O2_id = path.O_blocks[j]
-#                 D2_id = path.OD_mapping[O2_id]
-#                 new_path = solution.exchange_nodes_within_path(O1_id, O2_id, path_id, path)
-#                 new_path = solution.exchange_nodes_within_path(D1_id, D2_id, path_id, new_path)
-#                 new_distance = self._compute_distance(new_path)
-#                 delta = new_distance - original_distance
-#                 if delta < min_delta:
-#                     improved_path = new_path
-#                     min_delta = delta
-#                     label = O1_id, O2_id
-#         if label == None:
-#             return None, None, None
-#         else:
-#             return improved_path, min_delta, label
-#
-#     def _compute_distance(self, path):
-#         distance = 0
-#         for i in range(len(path)-1):
-#             distance += path.get_distance_by_node_ids()
-#         return distance
-
 
 class ODPairsExchangeOperator(Operator):
     def __init__(self):
