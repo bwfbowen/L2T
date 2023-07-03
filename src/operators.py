@@ -296,7 +296,6 @@ class RandomDBackwardOperator(Operator):
     def __init__(self):
         super().__init__(operator_type='path')
 
-
 class ODPairsExchangeOperator(Operator):
     def __init__(self):
         super().__init__(operator_type='path')
@@ -356,15 +355,3 @@ class ODPairsExchangeOperator(Operator):
             min_delta = delta
             label = O1.node_id, O2.node_id
         return min_delta, label
-
-
-
-
-
-
-
-
-
-
-
-
