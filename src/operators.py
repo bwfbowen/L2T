@@ -288,9 +288,11 @@ class DBackwardOperator(Operator):
 
 
 class RandomOForwardOperator(Operator):
-    def __init__(self):
+    def __init__(self, pct: float = 0.1):
         super().__init__(operator_type='path')
+        self.pct = pct 
 
+    
 
 class RandomDBackwardOperator(Operator):
     def __init__(self):
