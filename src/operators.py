@@ -1,3 +1,4 @@
+import random
 
 from . import solution
 
@@ -355,3 +356,26 @@ class ODPairsExchangeOperator(Operator):
             min_delta = delta
             label = O1.node_id, O2.node_id
         return min_delta, label
+
+class RandomODPairsExchangeOperator(Operator):
+
+    def __init__(self, change_percentage: float):
+        super().__init__(operator_type='path')
+        self.change = change_percentage
+
+    def __call__(self, solution: MultiODSolution, path_id: int = 0, min_delta=-EPSILON):
+        path: MultiODPath = solution.paths[path_id]
+        label = None
+        O_list = list(path.OD_mapping.keys())
+        num_Os = int(len(path)*self.change/2)
+        picked_pairs = set()
+
+        for _ in range(num_Os):
+            while True:
+                random_elements = random.sample(O_list, 2)
+                pair = tuple(sorted(random_elements))
+                if pair not in picked_pairs:
+                    picked_pairs.add(pair)
+                    break
+        return
+
