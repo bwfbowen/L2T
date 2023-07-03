@@ -287,3 +287,110 @@ class RandomOForwardOperator(Operator):
 class RandomDBackwardOperator(Operator):
     def __init__(self):
         super().__init__(operator_type='path')
+
+# class ODPairsExchangeOperator(Operator):
+#     def __init__(self):
+#         super().__init__(operator_type='path')
+#
+#     def __call__(self, solution: MultiODSolution, path_id: int = 0, min_delta=-EPSILON):
+#         path: MultiODPath = solution.paths[path_id]
+#         original_distance = self._compute_distance(path)
+#         improved_path = None
+#         label = None
+#         for i in range(len(path.O_blocks)):
+#             O1_id = path.O_blocks[i]
+#             D1_id = path.OD_mapping[O1_id]
+#             for j in range(i+1, len(path.O_blocks)):
+#                 O2_id = path.O_blocks[j]
+#                 D2_id = path.OD_mapping[O2_id]
+#                 new_path = solution.exchange_nodes_within_path(O1_id, O2_id, path_id, path)
+#                 new_path = solution.exchange_nodes_within_path(D1_id, D2_id, path_id, new_path)
+#                 new_distance = self._compute_distance(new_path)
+#                 delta = new_distance - original_distance
+#                 if delta < min_delta:
+#                     improved_path = new_path
+#                     min_delta = delta
+#                     label = O1_id, O2_id
+#         if label == None:
+#             return None, None, None
+#         else:
+#             return improved_path, min_delta, label
+#
+#     def _compute_distance(self, path):
+#         distance = 0
+#         for i in range(len(path)-1):
+#             distance += path.get_distance_by_node_ids()
+#         return distance
+
+
+class ODPairsExchangeOperator(Operator):
+    def __init__(self):
+        super().__init__(operator_type='path')
+
+    def __call__(self, solution: MultiODSolution, path_id: int = 0, min_delta=-EPSILON):
+        path: MultiODPath = solution.paths[path_id]
+        label = None
+        O_list = list(path.OD_mapping.keys())
+        for i in range(len(O_list)):
+            O1_id = O_list[i]
+            for j in range(i+1, len(O_list)):
+                O2_id = O_list[j]
+                inner_min_delta, inner_label = self.compute_delta(path.get_by_node_id(O1_id), path.get_by_node_id(O2_id), path, min_delta)
+                if inner_min_delta < min_delta:
+                    min_delta = inner_min_delta
+                    label = inner_label
+        if label is None:
+            return None, None, None
+        else:
+            improved_path = solution.exchange_nodes_within_path(label[0], label[1], path_id, path)
+            improved_path = solution.exchange_nodes_within_path(path.OD_mapping[label[0]], path.OD_mapping[label[1]], path_id, improved_path)
+            return improved_path, min_delta, label
+
+    def compute_delta(self, O1: Node, O2: Node, path: MultiODPath, min_delta=-EPSILON):
+        label, delta = None, 0.
+        O1_id = O1.node_id
+        O2_id = O2.node_id
+        D1 = path.get_by_node_id(path.OD_mapping[O1_id])
+        D2 = path.get_by_node_id(path.OD_mapping[O2_id])
+        next1 = D1.next_node.node_id if D1.next_node is not None else 0
+        next2 = D2.next_node.node_id if D2.next_node is not None else 0
+
+        before = (
+            path.get_distance_by_node_ids(O1.prev_node.node_id, O1.node_id)
+            + path.get_distance_by_node_ids(O1.node_id, O1.next_node.node_id)
+            + path.get_distance_by_node_ids(O2.prev_node.node_id, O2.node_id)
+            + path.get_distance_by_node_ids(O2.node_id, O2.next_node.node_id)
+            + path.get_distance_by_node_ids(D1.prev_node.node_id, D1.node_id)
+            + path.get_distance_by_node_ids(D1.node_id, next1)
+            + path.get_distance_by_node_ids(D2.prev_node.node_id, D2.node_id)
+            + path.get_distance_by_node_ids(D2.node_id, next2)
+        )
+
+        after = (
+            path.get_distance_by_node_ids(O1.prev_node.node_id, O2.node_id)
+            + path.get_distance_by_node_ids(O2.node_id, O1.next_node.node_id)
+            + path.get_distance_by_node_ids(O2.prev_node.node_id, O1.node_id)
+            + path.get_distance_by_node_ids(O1.node_id, O2.next_node.node_id)
+            + path.get_distance_by_node_ids(D1.prev_node.node_id, D2.node_id)
+            + path.get_distance_by_node_ids(D2.node_id, next1)
+            + path.get_distance_by_node_ids(D2.prev_node.node_id, D1.node_id)
+            + path.get_distance_by_node_ids(D1.node_id, next2)
+        )
+
+        delta = after - before
+        if delta < min_delta:
+            min_delta = delta
+            label = O1.node_id, O2.node_id
+        return min_delta, label
+
+
+
+
+
+
+
+
+
+
+
+
