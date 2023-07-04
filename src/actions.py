@@ -1,4 +1,4 @@
-import copy 
+import copy
 import gymnasium as gym 
 
 from . import operators
@@ -63,3 +63,16 @@ class PathAction(Action):
         # print(label)
         modified = True if label else False
         return improved_path, delta, modified
+    
+
+class PathRandomAction(Action):
+    def __init__(self, action_index: int, operator: Operator):
+        super().__init__(action_index=action_index, action_type='path-random', operator=operator)
+    
+    def __call__(self, env: gym.Env):
+        improved_solution = env.solution
+        all_delta = 0.
+        for path_id, path in enumerate(improved_solution.paths):
+            improved_path, delta, _ = self.operator(solution=improved_solution, path_id=path_id)
+            all_delta += delta 
+        return improved_solution, all_delta
