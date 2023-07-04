@@ -57,6 +57,23 @@ class MultiODEnv(gym.Env):
         _action_dict = {
             0: self._regenerate_feasible_solution,
             1: actions.InBlockAction(1, operator=operators.TwoOptOperator()),
-            2: actions.PathAction(2, operator=operators.ExchangeOperator())
+            2: actions.PathAction(2, operator=operators.ExchangeOperator()),
+            3: actions.PathAction(3, operator=operators.InsertOperator()),
+            4: actions.PathAction(4, operator=operators.OForwardOperator(length=2)),
+            5: actions.PathAction(5, operator=operators.OForwardOperator(length=3)),
+            6: actions.PathAction(6, operator=operators.OForwardOperator(length=4)),
+            7: actions.PathAction(7, operator=operators.DBackwardOperator(length=2)),
+            8: actions.PathAction(8, operator=operators.DBackwardOperator(length=3)),
+            9: actions.PathAction(9, operator=operators.DBackwardOperator(length=4)),
+            10: actions.PathAction(10, operator=operators.ODPairsExchangeOperator()),
+            11: actions.PathRandomAction(11, operator=operators.RandomODPairsExchangeOperator(change_percentage=0.1)),
+            12: actions.PathRandomAction(12, operator=operators.RandomODPairsExchangeOperator(change_percentage=0.3)),
+            13: actions.PathRandomAction(13, operator=operators.RandomODPairsExchangeOperator(change_percentage=0.5)),
+            14: actions.PathRandomAction(14, operator=operators.RandomOForwardOperator(change_percentage=0.1)),
+            15: actions.PathRandomAction(15, operator=operators.RandomOForwardOperator(change_percentage=0.3)),
+            16: actions.PathRandomAction(16, operator=operators.RandomOForwardOperator(change_percentage=0.5)),
+            17: actions.PathRandomAction(17, operator=operators.RandomDBackwardOperator(change_percentage=0.1)),
+            18: actions.PathRandomAction(18, operator=operators.RandomDBackwardOperator(change_percentage=0.3)),
+            19: actions.PathRandomAction(19, operator=operators.RandomDBackwardOperator(change_percentage=0.5)),
             }
         return _action_dict
