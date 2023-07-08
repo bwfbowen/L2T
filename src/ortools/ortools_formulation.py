@@ -1,5 +1,7 @@
 import numpy as np
 from ortools.linear_solver import pywraplp
+from ortools.constraint_solver import routing_enums_pb2
+from ortools.constraint_solver import pywrapcp
 
 def ortools_formulation(problem, formulation_type: str = '3D', name: str = 'MultiOD'):
     if formulation_type == '2D':
@@ -56,6 +58,84 @@ def ortools_formulation_2D(p, name: str = 'MultiOD'):
 
     return X, solver
 
+def print_solution(p, manager, routing, solution):
+    """Prints solution on console."""
+    print(f'Objective: {solution.ObjectiveValue()}')
+    total_distance = 0
+    for vehicle_id in range(p.num_taxi):
+        index = routing.Start(vehicle_id)
+        plan_output = 'Route for vehicle {}:\n'.format(vehicle_id)
+        route_distance = 0
+        while not routing.IsEnd(index):
+            plan_output += ' {} -> '.format(manager.IndexToNode(index))
+            previous_index = index
+            index = solution.Value(routing.NextVar(index))
+            route_distance += routing.GetArcCostForVehicle(
+                previous_index, index, vehicle_id)
+        plan_output += '{}\n'.format(manager.IndexToNode(index))
+        plan_output += 'Distance of the route: {}m\n'.format(route_distance)
+        print(plan_output)
+        total_distance += route_distance
+    print('Total Distance of all routes: {}m'.format(total_distance))
 
+def ortools_pd_formulation_2D(p, name: str = 'MultiOD'):
 
+    import numpy as np
+    distance_matrix = np.array(p.distance_matrix)[1:,1:]
 
+    # Create the routing index manager.
+    manager = pywrapcp.RoutingIndexManager(distance_matrix.shape[0],
+                                           p.num_taxi,
+                                           0)
+
+    # Create Routing Model.
+    routing = pywrapcp.RoutingModel(manager)
+
+    # Define cost of each arc.
+    def distance_callback(from_index, to_index):
+        from_node = manager.IndexToNode(from_index-1)
+        to_node = manager.IndexToNode(to_index-1)
+        return distance_matrix[from_node, to_node]
+
+    transit_callback_index = routing.RegisterTransitCallback(distance_callback)
+    routing.SetArcCostEvaluatorOfAllVehicles(transit_callback_index)
+
+    # Add Distance constraint.
+    dimension_name = 'Distance'
+    routing.AddDimension(
+        transit_callback_index,
+        0,  # no slack
+        int(1e5),  # vehicle maximum travel distance
+        True,  # start cumul to zero
+        dimension_name)
+    distance_dimension = routing.GetDimensionOrDie(dimension_name)
+    distance_dimension.SetGlobalSpanCostCoefficient(1)
+
+    # Define Transportation Requests.
+    for O_index, D_index in p.OD_mapping.items():
+        pickup_index = manager.NodeToIndex(O_index-1)
+        delivery_index = manager.NodeToIndex(D_index-1)
+        routing.AddPickupAndDelivery(pickup_index, delivery_index)
+        routing.solver().Add(
+            routing.VehicleVar(pickup_index) == routing.VehicleVar(
+                delivery_index))
+        routing.solver().Add(
+            distance_dimension.CumulVar(pickup_index) <=
+            distance_dimension.CumulVar(delivery_index))
+
+    # Setting first solution heuristic.
+    search_parameters = pywrapcp.DefaultRoutingSearchParameters()
+    search_parameters.first_solution_strategy = (
+        routing_enums_pb2.FirstSolutionStrategy.PARALLEL_CHEAPEST_INSERTION)
+
+    # Solve the problem.
+    solution = routing.SolveWithParameters(search_parameters)
+
+    # Print solution on console.
+    # if solution:
+    #     print_solution(p, manager, routing, solution)
+    return manager, routing, solution
+
+from src.problem import MultiODProblem
+p = MultiODProblem(num_O=8, num_taxi=1, seed=2)
+print(ortools_pd_formulation_2D(p)[2].ObjectiveValue())
