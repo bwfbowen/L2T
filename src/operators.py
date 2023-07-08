@@ -13,6 +13,7 @@ Node = solution.Node
 
 
 def _compute_delta_pair_exchange(O1: Node, O2: Node, path: MultiODPath):
+    # TODO: o.next == d
     label, delta = None, 0.
     O1_id = O1.node_id
     O2_id = O2.node_id
@@ -22,36 +23,55 @@ def _compute_delta_pair_exchange(O1: Node, O2: Node, path: MultiODPath):
     next2 = D2.next_node.node_id if D2.next_node is not None else 0
 
     if O2.seq_id == O1.seq_id + 1:
-        before_o = (
-            path.get_distance_by_node_ids(O1.prev_node.node_id, O1.node_id) 
-            + path.get_distance_by_node_ids(O2.node_id, O2.next_node.node_id)
-        ) 
-        after_o = (
-            path.get_distance_by_node_ids(O1.prev_node.node_id, O2.node_id)
-            + path.get_distance_by_node_ids(O1.node_id, O2.next_node.node_id)
-        )
+        if D2.seq_id == O2.seq_id + 1:
+            pass 
+        elif D1.seq_id == O2.seq_id + 1:
+            pass 
+        else:
+            before_o = (
+                path.get_distance_by_node_ids(O1.prev_node.node_id, O1.node_id) 
+                + path.get_distance_by_node_ids(O2.node_id, O2.next_node.node_id)
+            ) 
+            after_o = (
+                path.get_distance_by_node_ids(O1.prev_node.node_id, O2.node_id)
+                + path.get_distance_by_node_ids(O1.node_id, O2.next_node.node_id)
+            )
     elif O2.seq_id == O1.seq_id - 1:
-        before_o = (
-            path.get_distance_by_node_ids(O1.node_id, O1.next_node.node_id)
-            + path.get_distance_by_node_ids(O2.prev_node.node_id, O2.node_id)
-        ) 
-        after_o = (
-            path.get_distance_by_node_ids(O2.prev_node.node_id, O1.node_id)
-            + path.get_distance_by_node_ids(O2.node_id, O1.next_node.node_id)
-        )
+        if D2.seq_id == O1.seq_id + 1:
+            pass 
+        elif D1.seq_id == O1.seq_id + 1:
+            pass 
+        else:
+            before_o = (
+                path.get_distance_by_node_ids(O1.node_id, O1.next_node.node_id)
+                + path.get_distance_by_node_ids(O2.prev_node.node_id, O2.node_id)
+            ) 
+            after_o = (
+                path.get_distance_by_node_ids(O2.prev_node.node_id, O1.node_id)
+                + path.get_distance_by_node_ids(O2.node_id, O1.next_node.node_id)
+            )
     else:
-        before_o = (
-            path.get_distance_by_node_ids(O1.prev_node.node_id, O1.node_id)
-            + path.get_distance_by_node_ids(O1.node_id, O1.next_node.node_id)
-            + path.get_distance_by_node_ids(O2.prev_node.node_id, O2.node_id)
-            + path.get_distance_by_node_ids(O2.node_id, O2.next_node.node_id)
-        ) 
-        after_o = (
-            path.get_distance_by_node_ids(O1.prev_node.node_id, O2.node_id)
-            + path.get_distance_by_node_ids(O2.node_id, O1.next_node.node_id)
-            + path.get_distance_by_node_ids(O2.prev_node.node_id, O1.node_id)
-            + path.get_distance_by_node_ids(O1.node_id, O2.next_node.node_id)
-        )
+        if D2.seq_id == O1.seq_id + 1:
+            pass 
+        elif D1.seq_id == O1.seq_id + 1:
+            pass 
+        elif D2.seq_id == O2.seq_id + 1:
+            pass 
+        elif D1.seq_id == O2.seq_id + 1:
+            pass 
+        else:
+            before_o = (
+                path.get_distance_by_node_ids(O1.prev_node.node_id, O1.node_id)
+                + path.get_distance_by_node_ids(O1.node_id, O1.next_node.node_id)
+                + path.get_distance_by_node_ids(O2.prev_node.node_id, O2.node_id)
+                + path.get_distance_by_node_ids(O2.node_id, O2.next_node.node_id)
+            ) 
+            after_o = (
+                path.get_distance_by_node_ids(O1.prev_node.node_id, O2.node_id)
+                + path.get_distance_by_node_ids(O2.node_id, O1.next_node.node_id)
+                + path.get_distance_by_node_ids(O2.prev_node.node_id, O1.node_id)
+                + path.get_distance_by_node_ids(O1.node_id, O2.next_node.node_id)
+            )
     
     if D2.seq_id == D1.seq_id + 1:
         before_d = (
@@ -470,6 +490,7 @@ class ODPairsExchangeOperator(Operator):
                 if inner_min_delta < min_delta:
                     min_delta = inner_min_delta
                     label = inner_label
+        print(label, min_delta)
         if label is None:
             return None, None, None
         else:

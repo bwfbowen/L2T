@@ -61,7 +61,7 @@ class MultiODProblem(Problem):
     """
 
     def __init__(self, num_O: int = 10, num_taxi: int = 1, locations: dict = None, seed: int = 0):
-        self.num_taxi = num_taxi 
+        self.num_taxi = num_taxi
         self.distance_matrix, self.O, self.D, self.locations, self.node_index = self.generate_problem(num_O=num_O, num_taxi=num_taxi, locations=locations, seed=seed)
         self.OD_mapping = self.generate_OD_mapping(self.O, self.D)
     
@@ -112,6 +112,9 @@ class MultiODProblem(Problem):
         edge_index = np.array([*zip(*product(node_index, node_index))])
         distance_matrix = np.linalg.norm(locs[edge_index[0]] - locs[edge_index[1]],
                                               ord=2, axis=1).reshape(len(node_index), len(node_index))
+        # the elements in distance matrix should be integer in order to use ortools
+        distance_matrix = distance_matrix*100
+        distance_matrix = distance_matrix.astype(int)
         distance_matrix[0, :] = 0.
         distance_matrix[:, 0] = 0.
         return distance_matrix, O, D, locs, node_index
