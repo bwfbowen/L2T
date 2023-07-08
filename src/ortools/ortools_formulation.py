@@ -58,29 +58,9 @@ def ortools_formulation_2D(p, name: str = 'MultiOD'):
 
     return X, solver
 
-def print_solution(p, manager, routing, solution):
-    """Prints solution on console."""
-    print(f'Objective: {solution.ObjectiveValue()}')
-    total_distance = 0
-    for vehicle_id in range(p.num_taxi):
-        index = routing.Start(vehicle_id)
-        plan_output = 'Route for vehicle {}:\n'.format(vehicle_id)
-        route_distance = 0
-        while not routing.IsEnd(index):
-            plan_output += ' {} -> '.format(manager.IndexToNode(index))
-            previous_index = index
-            index = solution.Value(routing.NextVar(index))
-            route_distance += routing.GetArcCostForVehicle(
-                previous_index, index, vehicle_id)
-        plan_output += '{}\n'.format(manager.IndexToNode(index))
-        plan_output += 'Distance of the route: {}m\n'.format(route_distance)
-        print(plan_output)
-        total_distance += route_distance
-    print('Total Distance of all routes: {}m'.format(total_distance))
-
 def ortools_pd_formulation_2D(p, name: str = 'MultiOD'):
+    distance_matrix = p.distance_matrix[1:, 1:].tolist()
 
-    distance_matrix = p.distance_matrix[1:,1:].tolist()
     # Create the routing index manager.
     manager = pywrapcp.RoutingIndexManager(len(distance_matrix),
                                            p.num_taxi,
@@ -88,7 +68,6 @@ def ortools_pd_formulation_2D(p, name: str = 'MultiOD'):
 
     # Create Routing Model.
     routing = pywrapcp.RoutingModel(manager)
-
 
     # Define cost of each arc.
     def distance_callback(from_index, to_index):
@@ -110,12 +89,12 @@ def ortools_pd_formulation_2D(p, name: str = 'MultiOD'):
         True,  # start cumul to zero
         dimension_name)
     distance_dimension = routing.GetDimensionOrDie(dimension_name)
-    distance_dimension.SetGlobalSpanCostCoefficient(1)
+    distance_dimension.SetGlobalSpanCostCoefficient(100)
 
     # Define Transportation Requests.
     for O_index, D_index in p.OD_mapping.items():
-        pickup_index = manager.NodeToIndex(O_index-1)
-        delivery_index = manager.NodeToIndex(D_index-1)
+        pickup_index = manager.NodeToIndex(O_index - 1)
+        delivery_index = manager.NodeToIndex(D_index - 1)
         routing.AddPickupAndDelivery(pickup_index, delivery_index)
         routing.solver().Add(
             routing.VehicleVar(pickup_index) == routing.VehicleVar(
@@ -132,6 +111,5 @@ def ortools_pd_formulation_2D(p, name: str = 'MultiOD'):
     # Solve the problem.
     solution = routing.SolveWithParameters(search_parameters)
 
-    # Print solution on console.
-    if solution:
-        print_solution(p, manager, routing, solution)
+    return p, manager, routing, solution
+
