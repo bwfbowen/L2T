@@ -80,22 +80,23 @@ def print_solution(p, manager, routing, solution):
 
 def ortools_pd_formulation_2D(p, name: str = 'MultiOD'):
 
-    import numpy as np
-    distance_matrix = np.array(p.distance_matrix)[1:,1:]
-
+    distance_matrix = p.distance_matrix[1:,1:].tolist()
     # Create the routing index manager.
-    manager = pywrapcp.RoutingIndexManager(distance_matrix.shape[0],
+    manager = pywrapcp.RoutingIndexManager(len(distance_matrix),
                                            p.num_taxi,
                                            0)
 
     # Create Routing Model.
     routing = pywrapcp.RoutingModel(manager)
 
+
     # Define cost of each arc.
     def distance_callback(from_index, to_index):
-        from_node = manager.IndexToNode(from_index-1)
-        to_node = manager.IndexToNode(to_index-1)
-        return distance_matrix[from_node, to_node]
+        """Returns the manhattan distance between the two nodes."""
+        # Convert from routing variable Index to distance matrix NodeIndex.
+        from_node = manager.IndexToNode(from_index)
+        to_node = manager.IndexToNode(to_index)
+        return distance_matrix[from_node][to_node]
 
     transit_callback_index = routing.RegisterTransitCallback(distance_callback)
     routing.SetArcCostEvaluatorOfAllVehicles(transit_callback_index)
@@ -132,10 +133,5 @@ def ortools_pd_formulation_2D(p, name: str = 'MultiOD'):
     solution = routing.SolveWithParameters(search_parameters)
 
     # Print solution on console.
-    # if solution:
-    #     print_solution(p, manager, routing, solution)
-    return manager, routing, solution
-
-from src.problem import MultiODProblem
-p = MultiODProblem(num_O=8, num_taxi=1, seed=2)
-print(ortools_pd_formulation_2D(p)[2].ObjectiveValue())
+    if solution:
+        print_solution(p, manager, routing, solution)
