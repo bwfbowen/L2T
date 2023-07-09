@@ -91,6 +91,8 @@ class MultiODProblem(Problem):
         np.random.seed(seed)
         random.seed(seed)
         if locations is not None:
+            num_O = len(locations['O'])
+            num_taxi = len(locations['taxi'])
             total_num_points = len(locations['O']) + len(locations['D'])
             total_num_points += len(locations['taxi']) if 'taxi' in locations else num_taxi
             total_num_points += 1  # dummy
