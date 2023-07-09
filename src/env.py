@@ -9,13 +9,41 @@ from . import utils
 MultiODProblem = problem.MultiODProblem
 
 
+def get_default_action_dict(env_instance):
+    _actions = [ 
+               'actions.InBlockAction({idx}, operator=operators.TwoOptOperator())',
+               'actions.PathAction({idx}, operator=operators.SegmentTwoOptOperator())',
+               'actions.PathAction({idx}, operator=operators.ExchangeOperator())',
+               'actions.PathAction({idx}, operator=operators.InsertOperator())',
+               'actions.PathAction({idx}, operator=operators.OForwardOperator(length=2))',
+               'actions.PathAction({idx}, operator=operators.OForwardOperator(length=3))',
+               'actions.PathAction({idx}, operator=operators.OForwardOperator(length=4))',
+               'actions.PathAction({idx}, operator=operators.DBackwardOperator(length=2))',
+               'actions.PathAction({idx}, operator=operators.DBackwardOperator(length=3))',
+               'actions.PathAction({idx}, operator=operators.DBackwardOperator(length=4))',
+               'actions.PathAction({idx}, operator=operators.ODPairsExchangeOperator())',
+               'actions.PathRandomAction({idx}, operator=operators.RandomODPairsExchangeOperator(change_percentage=0.1))',
+               'actions.PathRandomAction({idx}, operator=operators.RandomODPairsExchangeOperator(change_percentage=0.3))',
+               'actions.PathRandomAction({idx}, operator=operators.RandomODPairsExchangeOperator(change_percentage=0.5))',
+               'actions.PathRandomAction({idx}, operator=operators.RandomOForwardOperator(change_percentage=0.1))',
+               'actions.PathRandomAction({idx}, operator=operators.RandomOForwardOperator(change_percentage=0.3))',
+               'actions.PathRandomAction({idx}, operator=operators.RandomOForwardOperator(change_percentage=0.5))',
+               'actions.PathRandomAction({idx}, operator=operators.RandomDBackwardOperator(change_percentage=0.1))',
+               'actions.PathRandomAction({idx}, operator=operators.RandomDBackwardOperator(change_percentage=0.3))',
+               'actions.PathRandomAction({idx}, operator=operators.RandomDBackwardOperator(change_percentage=0.5))'
+               ]
+    _action_dict = {idx: eval(_action.format(idx=idx)) for idx, _action in enumerate(_actions, start=1)}
+    _action_dict[0] = env_instance._regenerate_feasible_solution
+    return _action_dict
+
+
 class MultiODEnv(gym.Env):
     def __init__(self, problem: MultiODProblem = None, action_dict: dict = None,
                  *, 
                  num_O: int = 10, num_taxi: int = 1, locations: dict = None, seed: int = 0):
         super().__init__()
         self.problem = problem if problem is not None else MultiODProblem(num_O=num_O, num_taxi=num_taxi, locations=locations, seed=seed)
-        self.action_dict = action_dict if action_dict is not None else self._default_action_dict
+        self._action_dict = action_dict if action_dict is not None else get_default_action_dict(self)
     
     def step(self, action: int):
         self.solution, all_delta = self.action_dict[action](self)
@@ -53,27 +81,9 @@ class MultiODEnv(gym.Env):
         return None 
     
     @property
-    def _default_action_dict(self):
-        _action_dict = {
-            0: self._regenerate_feasible_solution,
-            1: actions.InBlockAction(1, operator=operators.TwoOptOperator()),
-            2: actions.PathAction(2, operator=operators.ExchangeOperator()),
-            3: actions.PathAction(3, operator=operators.InsertOperator()),
-            4: actions.PathAction(4, operator=operators.OForwardOperator(length=2)),
-            5: actions.PathAction(5, operator=operators.OForwardOperator(length=3)),
-            6: actions.PathAction(6, operator=operators.OForwardOperator(length=4)),
-            7: actions.PathAction(7, operator=operators.DBackwardOperator(length=2)),
-            8: actions.PathAction(8, operator=operators.DBackwardOperator(length=3)),
-            9: actions.PathAction(9, operator=operators.DBackwardOperator(length=4)),
-            10: actions.PathAction(10, operator=operators.ODPairsExchangeOperator()),
-            11: actions.PathRandomAction(11, operator=operators.RandomODPairsExchangeOperator(change_percentage=0.1)),
-            12: actions.PathRandomAction(12, operator=operators.RandomODPairsExchangeOperator(change_percentage=0.3)),
-            13: actions.PathRandomAction(13, operator=operators.RandomODPairsExchangeOperator(change_percentage=0.5)),
-            14: actions.PathRandomAction(14, operator=operators.RandomOForwardOperator(change_percentage=0.1)),
-            15: actions.PathRandomAction(15, operator=operators.RandomOForwardOperator(change_percentage=0.3)),
-            16: actions.PathRandomAction(16, operator=operators.RandomOForwardOperator(change_percentage=0.5)),
-            17: actions.PathRandomAction(17, operator=operators.RandomDBackwardOperator(change_percentage=0.1)),
-            18: actions.PathRandomAction(18, operator=operators.RandomDBackwardOperator(change_percentage=0.3)),
-            19: actions.PathRandomAction(19, operator=operators.RandomDBackwardOperator(change_percentage=0.5)),
-            }
-        return _action_dict
+    def action_dict(self):
+        return self._action_dict
+    
+    @action_dict.setter
+    def set_action_dict(self, value):
+        self._action_dict = value 
