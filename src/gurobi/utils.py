@@ -29,8 +29,9 @@ def display_gurobi_result(X, model, problem,
         fig.suptitle(fig_name)
         colors = cm.rainbow(np.linspace(0, 1, 4))  # 4 different color for dummy, taxi, O and D respectively
         x, y = problem.locations[:, 0], problem.locations[:, 1]
-        for i in range(len(departs)):
+        for i in range(len(departs)): # not displaying back to dummy arrow
             di, ai = departs[i], arrivals[i]
+            if ai == 0: continue
             # plt.plot([x[di], x[ai]], [y[di], y[ai]], 'k-')
             plt.quiver(x[di], y[di], x[ai] - x[di], y[ai] - y[di], scale_units='xy', angles='xy', scale=1, width=quiver_width)
             

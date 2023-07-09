@@ -1,5 +1,5 @@
 import random
-from collections import deque 
+from collections import deque, defaultdict
 from itertools import islice
 
 import numpy as np
@@ -61,7 +61,7 @@ def display_result(problem, solution,
     x, y = problem.locations[:, 0], problem.locations[:, 1]
     for path in solution.paths:
         p = [node for node in path]
-        for i in range(len(p) - 1):
+        for i in range(len(p) - 2): # not displaying back to dummy arrow
             di, ai = p[i], p[i + 1]
             # plt.plot([x[di], x[ai]], [y[di], y[ai]], 'k-')
             plt.quiver(x[di], y[di], x[ai] - x[di], y[ai] - y[di], scale_units='xy', angles='xy', scale=1, width=quiver_width)
@@ -79,3 +79,22 @@ def display_result(problem, solution,
         for idx, i in enumerate(problem.D, start=1):
             plt.annotate(f'D{idx}', (x[i], y[i]))
     return fig
+
+
+def read_instance_data(instance_path):
+    locations = defaultdict(deque)
+    with open(instance_path) as f:
+        while line := f.readline():
+            if line.rstrip() == 'NODE_COORD_SECTION':
+                # +0, -0
+                locations['dummy'] = np.array(f.readline().rstrip().split()[1:], dtype=float, ndmin=2)
+                locations['taxi'] = np.array(f.readline().rstrip().split()[1:], dtype=float, ndmin=2)
+                while (loc := f.readline().rstrip()) != 'PRECEDENCE_SECTION':
+                    if loc.startswith('+'):
+                        locations['O'].append(loc.split()[1:])
+                    else:
+                        locations['D'].append(loc.split()[1:])
+                break 
+        f.close()
+    locations['O'], locations['D'] = np.asarray(locations['O'], dtype=float), np.asarray(locations['D'], dtype=float)
+    return locations 
