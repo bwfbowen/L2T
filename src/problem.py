@@ -112,9 +112,6 @@ class MultiODProblem(Problem):
         edge_index = np.array([*zip(*product(node_index, node_index))])
         distance_matrix = np.linalg.norm(locs[edge_index[0]] - locs[edge_index[1]],
                                               ord=2, axis=1).reshape(len(node_index), len(node_index))
-        # the elements in distance matrix should be integer in order to use ortools
-        distance_matrix = distance_matrix*100
-        distance_matrix = distance_matrix.astype(int)
         distance_matrix[0, :] = 0.
         distance_matrix[:, 0] = 0.
         return distance_matrix, O, D, locs, node_index
