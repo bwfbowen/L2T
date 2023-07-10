@@ -60,12 +60,14 @@ class MultiODProblem(Problem):
         `O` and `D` must be provided. If `taxi` or `dummy` is not provided, the default value will be applied.
     """
 
-    def __init__(self, num_O: int = 10, num_taxi: int = 1, locations: dict = None, seed: int = 0):
+    def __init__(self, num_O: int = 10, num_taxi: int = 1, locations: dict = None, seed: int = 0, 
+                 ignore_from_dummy_cost: bool = True, ignore_to_dummy_cost: bool = True):
         self.num_taxi = num_taxi
-        self.distance_matrix, self.O, self.D, self.locations, self.node_index = self.generate_problem(num_O=num_O, num_taxi=num_taxi, locations=locations, seed=seed)
+        self.distance_matrix, self.O, self.D, self.locations, self.node_index = self.generate_problem(num_O=num_O, num_taxi=num_taxi, locations=locations, seed=seed, ignore_from_dummy_cost=ignore_from_dummy_cost, ignore_to_dummy_cost=ignore_to_dummy_cost)
         self.OD_mapping = self.generate_OD_mapping(self.O, self.D)
     
-    def generate_problem(self, num_O: int = 10, num_taxi: int = 1, locations: dict = None, seed: int = 0):
+    def generate_problem(self, num_O: int = 10, num_taxi: int = 1, locations: dict = None, seed: int = 0,
+                         ignore_from_dummy_cost: bool = True, ignore_to_dummy_cost: bool = True):
         """Method that generates a multi-OD required information.
         
         There will be a total of (1 + `num_O` + `num_taxi`) points. 1 is for a dummy start, 
@@ -114,8 +116,10 @@ class MultiODProblem(Problem):
         edge_index = np.array([*zip(*product(node_index, node_index))])
         distance_matrix = np.linalg.norm(locs[edge_index[0]] - locs[edge_index[1]],
                                               ord=2, axis=1).reshape(len(node_index), len(node_index))
-        distance_matrix[0, :] = 0.
-        distance_matrix[:, 0] = 0.
+        if ignore_from_dummy_cost:
+            distance_matrix[0, :] = 0.
+        if ignore_to_dummy_cost:
+            distance_matrix[:, 0] = 0.
         return distance_matrix, O, D, locs, node_index
     
     def generate_OD_mapping(self, O, D):
