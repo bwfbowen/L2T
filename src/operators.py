@@ -14,79 +14,113 @@ Node = solution.Node
 
 def _compute_delta_pair_exchange(O1: Node, O2: Node, path: MultiODPath):
     label, delta = None, 0.
-    O1_id = O1.node_id
-    O2_id = O2.node_id
-    D1 = path.get_by_node_id(path.OD_mapping[O1_id])
-    D2 = path.get_by_node_id(path.OD_mapping[O2_id])
-    next1 = D1.next_node.node_id if D1.next_node is not None else 0
-    next2 = D2.next_node.node_id if D2.next_node is not None else 0
+    # O1_id = O1.node_id
+    # O2_id = O2.node_id
+    # D1 = path.get_by_node_id(path.OD_mapping[O1_id])
+    # D2 = path.get_by_node_id(path.OD_mapping[O2_id])
+    # next1 = D1.next_node.node_id if D1.next_node is not None else 0
+    # next2 = D2.next_node.node_id if D2.next_node is not None else 0
+    #
+    # if O2.seq_id == O1.seq_id + 1:
+    #     before_o = (
+    #         path.get_distance_by_node_ids(O1.prev_node.node_id, O1.node_id)
+    #         + path.get_distance_by_node_ids(O2.node_id, O2.next_node.node_id)
+    #     )
+    #     after_o = (
+    #         path.get_distance_by_node_ids(O1.prev_node.node_id, O2.node_id)
+    #         + path.get_distance_by_node_ids(O1.node_id, O2.next_node.node_id)
+    #     )
+    # elif O2.seq_id == O1.seq_id - 1:
+    #     before_o = (
+    #         path.get_distance_by_node_ids(O1.node_id, O1.next_node.node_id)
+    #         + path.get_distance_by_node_ids(O2.prev_node.node_id, O2.node_id)
+    #     )
+    #     after_o = (
+    #         path.get_distance_by_node_ids(O2.prev_node.node_id, O1.node_id)
+    #         + path.get_distance_by_node_ids(O2.node_id, O1.next_node.node_id)
+    #     )
+    # else:
+    #     before_o = (
+    #         path.get_distance_by_node_ids(O1.prev_node.node_id, O1.node_id)
+    #         + path.get_distance_by_node_ids(O1.node_id, O1.next_node.node_id)
+    #         + path.get_distance_by_node_ids(O2.prev_node.node_id, O2.node_id)
+    #         + path.get_distance_by_node_ids(O2.node_id, O2.next_node.node_id)
+    #     )
+    #     after_o = (
+    #         path.get_distance_by_node_ids(O1.prev_node.node_id, O2.node_id)
+    #         + path.get_distance_by_node_ids(O2.node_id, O1.next_node.node_id)
+    #         + path.get_distance_by_node_ids(O2.prev_node.node_id, O1.node_id)
+    #         + path.get_distance_by_node_ids(O1.node_id, O2.next_node.node_id)
+    #     )
+    #
+    # if D2.seq_id == D1.seq_id + 1:
+    #     before_d = (
+    #         path.get_distance_by_node_ids(D1.prev_node.node_id, D1.node_id)
+    #         + path.get_distance_by_node_ids(D2.node_id, next2)
+    #     )
+    #     after_d = (
+    #         path.get_distance_by_node_ids(D1.prev_node.node_id, D2.node_id)
+    #         + path.get_distance_by_node_ids(D1.node_id, next2)
+    #     )
+    # elif D2.seq_id == D1.seq_id - 1:
+    #     before_d = (
+    #         path.get_distance_by_node_ids(D2.prev_node.node_id, D2.node_id)
+    #         + path.get_distance_by_node_ids(D1.node_id, next1)
+    #     )
+    #     after_d = (
+    #         path.get_distance_by_node_ids(D2.prev_node.node_id, D1.node_id)
+    #         + path.get_distance_by_node_ids(D2.node_id, next1)
+    #     )
+    # else:
+    #     before_d = (
+    #         path.get_distance_by_node_ids(D1.prev_node.node_id, D1.node_id)
+    #         + path.get_distance_by_node_ids(D1.node_id, next1)
+    #         + path.get_distance_by_node_ids(D2.prev_node.node_id, D2.node_id)
+    #         + path.get_distance_by_node_ids(D2.node_id, next2)
+    #     )
+    #     after_d = (
+    #         path.get_distance_by_node_ids(D1.prev_node.node_id, D2.node_id)
+    #         + path.get_distance_by_node_ids(D2.node_id, next1)
+    #         + path.get_distance_by_node_ids(D2.prev_node.node_id, D1.node_id)
+    #         + path.get_distance_by_node_ids(D1.node_id, next2)
+    #     )
+    #
+    # before = before_o + before_d
+    # after = after_o + after_d
 
-    if O2.seq_id == O1.seq_id + 1:
-        before_o = (
-            path.get_distance_by_node_ids(O1.prev_node.node_id, O1.node_id) 
-            + path.get_distance_by_node_ids(O2.node_id, O2.next_node.node_id)
-        ) 
-        after_o = (
-            path.get_distance_by_node_ids(O1.prev_node.node_id, O2.node_id)
-            + path.get_distance_by_node_ids(O1.node_id, O2.next_node.node_id)
-        )
-    elif O2.seq_id == O1.seq_id - 1:
-        before_o = (
-            path.get_distance_by_node_ids(O1.node_id, O1.next_node.node_id)
-            + path.get_distance_by_node_ids(O2.prev_node.node_id, O2.node_id)
-        ) 
-        after_o = (
-            path.get_distance_by_node_ids(O2.prev_node.node_id, O1.node_id)
-            + path.get_distance_by_node_ids(O2.node_id, O1.next_node.node_id)
-        )
-    else:
-        before_o = (
-            path.get_distance_by_node_ids(O1.prev_node.node_id, O1.node_id)
-            + path.get_distance_by_node_ids(O1.node_id, O1.next_node.node_id)
-            + path.get_distance_by_node_ids(O2.prev_node.node_id, O2.node_id)
-            + path.get_distance_by_node_ids(O2.node_id, O2.next_node.node_id)
-        ) 
-        after_o = (
-            path.get_distance_by_node_ids(O1.prev_node.node_id, O2.node_id)
-            + path.get_distance_by_node_ids(O2.node_id, O1.next_node.node_id)
-            + path.get_distance_by_node_ids(O2.prev_node.node_id, O1.node_id)
-            + path.get_distance_by_node_ids(O1.node_id, O2.next_node.node_id)
-        )
-    
-    if D2.seq_id == D1.seq_id + 1:
-        before_d = (
-            path.get_distance_by_node_ids(D1.prev_node.node_id, D1.node_id)
-            + path.get_distance_by_node_ids(D2.node_id, next2)
-        )
-        after_d = (
-            path.get_distance_by_node_ids(D1.prev_node.node_id, D2.node_id)
-            + path.get_distance_by_node_ids(D1.node_id, next2)
-        )
-    elif D2.seq_id == D1.seq_id - 1:
-        before_d = (
-            path.get_distance_by_node_ids(D2.prev_node.node_id, D2.node_id)
-            + path.get_distance_by_node_ids(D1.node_id, next1)
-        )
-        after_d = (
-            path.get_distance_by_node_ids(D2.prev_node.node_id, D1.node_id)
-            + path.get_distance_by_node_ids(D2.node_id, next1)
-        )
-    else:
-        before_d = (
-            path.get_distance_by_node_ids(D1.prev_node.node_id, D1.node_id)
-            + path.get_distance_by_node_ids(D1.node_id, next1)
-            + path.get_distance_by_node_ids(D2.prev_node.node_id, D2.node_id)
-            + path.get_distance_by_node_ids(D2.node_id, next2)
-        )
-        after_d = (
-            path.get_distance_by_node_ids(D1.prev_node.node_id, D2.node_id)
-            + path.get_distance_by_node_ids(D2.node_id, next1)
-            + path.get_distance_by_node_ids(D2.prev_node.node_id, D1.node_id)
-            + path.get_distance_by_node_ids(D1.node_id, next2)
-        )
+    # iterate through the whole path to calculate the total distance
+    before = 0
+    sequence_before = list(path.seq_dict.keys())
+    for i in range(len(sequence_before)-1):
+        before += path.get_distance_by_node_ids(path.seq_dict[sequence_before[i]].node_id,
+                                                path.seq_dict[sequence_before[i+1]].node_id)
 
-    before = before_o + before_d
-    after = after_o + after_d
+    path_after = copy.deepcopy(path.seq_dict)
+
+    def swap_keys(dictionary, value1, value2):
+        # Find the keys corresponding to the given values
+        key1 = None
+        key2 = None
+        for key, value in dictionary.items():
+            if value == value1:
+                key1 = key
+            elif value == value2:
+                key2 = key
+
+        # Swap the keys for the two key-value pairs
+        if key1 and key2:
+            dictionary[key1], dictionary[key2] = dictionary[key2], dictionary[key1]
+        return dictionary
+
+    path_after = swap_keys(path_after, O1, O2)
+    path_after = swap_keys(path_after, path.get_by_node_id(path.OD_mapping[O1.node_id]),
+                           path.get_by_node_id(path.OD_mapping[O2.node_id]))
+
+    after = 0
+    sequence_after = list(path_after.keys())
+    for i in range(len(sequence_before)-1):
+        after += path.get_distance_by_node_ids(path_after[sequence_after[i]].node_id,
+                                                path_after[sequence_after[i+1]].node_id)
 
     delta = after - before
     label = O1.node_id, O2.node_id
