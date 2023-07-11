@@ -124,6 +124,7 @@ def _compute_delta_pair_exchange(O1: Node, O2: Node, path: MultiODPath):
 
     delta = after - before
     label = O1.node_id, O2.node_id
+
     return delta, label
 
 
