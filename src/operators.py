@@ -13,6 +13,46 @@ MultiODPath = solution.MultiODPath
 Node = solution.Node
 SliceableDeque = utils.SliceableDeque
 
+# iterate through whole path
+def _compute_delta_pair_exchange(O1: Node, O2: Node, path: MultiODPath):
+    before = 0
+    sequence_before = list(path.seq_dict.keys())
+    for i in range(len(sequence_before) - 1):
+        before += path.get_distance_by_node_ids(path.seq_dict[sequence_before[i]].node_id,
+                                                path.seq_dict[sequence_before[i + 1]].node_id)
+
+    path_after = copy.deepcopy(path.seq_dict)
+
+    def swap_keys(dictionary, value1, value2):
+        # Find the keys corresponding to the given values
+        key1 = None
+        key2 = None
+        for key, value in dictionary.items():
+            if value == value1:
+                key1 = key
+            elif value == value2:
+                key2 = key
+
+        # Swap the keys for the two key-value pairs
+        if key1 and key2:
+            dictionary[key1], dictionary[key2] = dictionary[key2], dictionary[key1]
+        return dictionary
+
+    path_after = swap_keys(path_after, O1, O2)
+    path_after = swap_keys(path_after, path.get_by_node_id(path.OD_mapping[O1.node_id]),
+                           path.get_by_node_id(path.OD_mapping[O2.node_id]))
+
+    after = 0
+    sequence_after = list(path_after.keys())
+    for i in range(len(sequence_before) - 1):
+        after += path.get_distance_by_node_ids(path_after[sequence_after[i]].node_id,
+                                               path_after[sequence_after[i + 1]].node_id)
+
+    delta = after - before
+    label = O1.node_id, O2.node_id
+    return delta, label
+
+
 
 def _compute_delta_pair_exchange(o1: Node, o2: Node, path: MultiODPath):
     label, delta = None, 0.
