@@ -8,6 +8,7 @@ from . import utils
 
 
 MultiODProblem = problem.MultiODProblem
+SliceableDeque = utils.SliceableDeque
 
 
 def get_default_action_dict(env_instance):
@@ -41,11 +42,18 @@ def get_default_action_dict(env_instance):
 class MultiODEnv(gym.Env):
     def __init__(self, problem: MultiODProblem = None, action_dict: dict = None,
                  *, 
-                 num_O: int = 10, num_taxi: int = 1, locations: dict = None, seed: int = 0, max_length: int = int(4e4)):
+                 num_O: int = 10, 
+                 num_taxi: int = 1, 
+                 locations: dict = None, 
+                 seed: int = 0, 
+                 max_length: int = int(4e4),
+                 k_recent: int = 1
+                 ):
         super().__init__()
         self.problem = problem if problem is not None else MultiODProblem(num_O=num_O, num_taxi=num_taxi, locations=locations, seed=seed)
         self._action_dict = action_dict if action_dict is not None else get_default_action_dict(self)
         self._max_length = max_length
+        self._k_recent = k_recent
     
     def step(self, action: int):
         self._step += 1
@@ -53,7 +61,7 @@ class MultiODEnv(gym.Env):
         next_obs = self.generate_state(self.solution)
         reward, done = self._calc_reward(all_delta), self._calc_done(self._step)
         self._update_history_buffer(action, all_delta)
-        infos = self._calc_infos(all_delta, self._history_actions[-self._k_recent:], self._history_delta_sign[-self._k_recent:])
+        infos = self._calc_infos(all_delta, self._history_action_buffer, self._history_delta_sign)
         if infos['cost'] < self.best_cost:
             self._update_best_solution(self.solution, infos, self._step)
         return next_obs, reward, done, infos
@@ -61,9 +69,9 @@ class MultiODEnv(gym.Env):
     def reset(self):
         self._step = 0
         self.solution = self.problem.generate_feasible_solution()
-        self._update_history_buffer()
-        obs, infos = self.generate_state(self.solution), self._calc_infos()
-        self._update_best_solution(self.solution, infos, self._step)
+        self._reset_history_buffer()
+        self._reset_best_solution(self.solution)
+        obs, infos = self.generate_state(self.solution), self._calc_infos(k_recent_action=self._history_action_buffer, k_recent_delta_sign=self._history_delta_sign)
         return obs, infos
 
     def render(self, mode='human', *, figsize: tuple = (8, 6), dpi: float = 80, fig_name: str = None, to_annotate: bool = True, quiver_width: float = 5e-3):
@@ -75,11 +83,12 @@ class MultiODEnv(gym.Env):
         infos = {}
         infos['delta'] = delta 
         infos['cost'] = self.problem.calc_cost(self.solution)
-        infos['history_actions'], infos['history_delta_sign'] = k_recent_action, k_recent_delta_sign
+        infos['delta_best'] = infos['cost'] - self.best_cost
+        infos['k_recent_action'], infos['k_recent_delta_sign'] = k_recent_action, k_recent_delta_sign
         return infos 
     
     def _calc_reward(self, all_delta):
-        return all_delta
+        return -all_delta
     
     def _calc_done(self, step):
         return step >= self._max_length
@@ -91,19 +100,55 @@ class MultiODEnv(gym.Env):
         delta = new_cost - old_cost
         return self.solution, delta
     
+    def _reset_history_buffer(self):
+        self._history_action_buffer = SliceableDeque([0 for _ in range(self._k_recent)], maxlen=self._k_recent)
+        self._history_delta_sign = SliceableDeque([0. for _ in range(self._k_recent)], maxlen=self._k_recent)
+    
+    def _reset_best_solution(self, solution):
+        self.best_solution = self.get_np_repr_of_solution(solution)
+        self.best_cost = self.problem.calc_cost(solution)
+        self.best_sol_at_step = 0
+
     def _update_best_solution(self, solution, infos, step):
         self.best_solution = self.get_np_repr_of_solution(solution)
         self.best_cost = infos['cost']
         self.best_sol_at_step = step
     
     def _update_history_buffer(self, action: int = 0, delta: float = 0.):
-        pass 
+        self._history_action_buffer.append(action)
+        self._history_delta_sign.append(np.sign(delta))
     
     def generate_state(self, solution):
-        return self.get_np_repr_of_solution(solution)
+        return self.calc_features_of_solution(solution)
     
     def get_np_repr_of_solution(self, solution):
         return np.asarray([[*iter(path)] for path in solution.paths]) 
+    
+    def calc_features_of_solution(self, solution):
+        features = np.zeros((self.problem.num_O * 2, 12))
+        for path in solution:
+            n = len(path) - 1
+            for i in range(2, n):
+                node = path.get_by_seq_id(i)
+                _prev = node.prev_node
+                _prev_id, _prev_OD = _prev.node_id, _prev.OD_type if _prev.OD_type is not None else 2
+                _next = node.next_node if node.next_node is not None else 0
+                if _next != 0:
+                    _next_id, _next_OD = _next.node_id, _next.OD_type 
+                else:
+                    _next_id, _next_OD = 0, 2
+                # prev, node, next location, shape: (2*3,)
+                f1 = path.locations[[_prev_id, node.node_id, _next_id]].flatten()
+                # prev->node, node->next, prev->next distance, shape: (3,)
+                f2 = np.array([path.get_distance_by_node_ids(_prev_id, node.node_id), 
+                            path.get_distance_by_node_ids(node.node_id, _next_id),
+                            path.get_distance_by_node_ids(_prev_id, _next_id)])
+                # prev, node, next OD type, shape: (3,)
+                f3 = np.array([_prev_OD, node.OD_type, _next_OD])
+                features[node.node_id - 1 - self.problem.num_taxi, :6] = f1
+                features[node.node_id - 1 - self.problem.num_taxi, 6:9] = f2
+                features[node.node_id - 1 - self.problem.num_taxi, 9:12] = f3 
+        return features
 
     @property
     def action_dict(self):

@@ -13,216 +13,6 @@ MultiODPath = solution.MultiODPath
 Node = solution.Node
 SliceableDeque = utils.SliceableDeque
 
-# iterate through whole path
-def _compute_delta_pair_exchange(O1: Node, O2: Node, path: MultiODPath):
-    before = 0
-    sequence_before = list(path.seq_dict.keys())
-    for i in range(len(sequence_before) - 1):
-        before += path.get_distance_by_node_ids(path.seq_dict[sequence_before[i]].node_id,
-                                                path.seq_dict[sequence_before[i + 1]].node_id)
-
-    path_after = copy.deepcopy(path.seq_dict)
-
-    def swap_keys(dictionary, value1, value2):
-        # Find the keys corresponding to the given values
-        key1 = None
-        key2 = None
-        for key, value in dictionary.items():
-            if value == value1:
-                key1 = key
-            elif value == value2:
-                key2 = key
-
-        # Swap the keys for the two key-value pairs
-        if key1 and key2:
-            dictionary[key1], dictionary[key2] = dictionary[key2], dictionary[key1]
-        return dictionary
-
-    path_after = swap_keys(path_after, O1, O2)
-    path_after = swap_keys(path_after, path.get_by_node_id(path.OD_mapping[O1.node_id]),
-                           path.get_by_node_id(path.OD_mapping[O2.node_id]))
-
-    after = 0
-    sequence_after = list(path_after.keys())
-    for i in range(len(sequence_before) - 1):
-        after += path.get_distance_by_node_ids(path_after[sequence_after[i]].node_id,
-                                               path_after[sequence_after[i + 1]].node_id)
-
-    delta = after - before
-    label = O1.node_id, O2.node_id
-    return delta, label
-
-
-
-def _compute_delta_pair_exchange(o1: Node, o2: Node, path: MultiODPath):
-    label, delta = None, 0.
-
-    o1_id = o1.node_id
-    o2_id = o2.node_id
-    d1 = path.get_by_node_id(path.OD_mapping[o1_id])
-    d2 = path.get_by_node_id(path.OD_mapping[o2_id])
-    if o1.seq_id > o2.seq_id:
-        o_f, o_s = o2, o1 
-    else:
-        o_f, o_s = o1, o2 
-    if d1.seq_id > d2.seq_id:
-        d_f, d_s = d2, d1 
-    else:
-        d_f, d_s = d1, d2 
-    o_f_prev, o_f_next = o_f.prev_node.node_id, o_f.next_node.node_id
-    o_s_prev, o_s_next = o_s.prev_node.node_id, o_s.next_node.node_id 
-    d_f_prev, d_f_next = d_f.prev_node.node_id, d_f.next_node.node_id
-    d_s_prev, d_s_next = d_s.prev_node.node_id, d_s.next_node.node_id if d_s.next_node is not None else 0
-    
-    o_f_nseq, o_s_nseq, d_f_nseq = o_f.seq_id + 1, o_s.seq_id + 1, d_f.seq_id + 1
-    o_fs_is_neighbor, od_sf_is_neighbor, d_sf_is_neighbor = o_f_nseq == o_s.seq_id, o_s_nseq == d_f.seq_id, d_f_nseq == d_s.seq_id
-
-    # Of,Os,...,Df,...,Ds
-    if o_fs_is_neighbor and not od_sf_is_neighbor and not d_sf_is_neighbor:
-        before = (
-            path.get_distance_by_node_ids(o_f_prev, o_f.node_id)
-            + path.get_distance_by_node_ids(o_s_next, o_s.node_id)
-            + path.get_distance_by_node_ids(d_f_prev, d_f.node_id)
-            + path.get_distance_by_node_ids(d_f_next, d_f.node_id)
-            + path.get_distance_by_node_ids(d_s_prev, d_s.node_id)
-            + path.get_distance_by_node_ids(d_s_next, d_s.node_id)
-        )
-        after = (
-            path.get_distance_by_node_ids(o_f_prev, o_s.node_id)
-            + path.get_distance_by_node_ids(o_s_next, o_f.node_id)
-            + path.get_distance_by_node_ids(d_f_prev, d_s.node_id)
-            + path.get_distance_by_node_ids(d_f_next, d_s.node_id)
-            + path.get_distance_by_node_ids(d_s_prev, d_f.node_id)
-            + path.get_distance_by_node_ids(d_s_next, d_f.node_id)
-        )
-    
-    # Of,Os,...,Df,Ds
-    elif o_fs_is_neighbor and not od_sf_is_neighbor and d_sf_is_neighbor:
-        before = (
-            path.get_distance_by_node_ids(o_f_prev, o_f.node_id)
-            + path.get_distance_by_node_ids(o_s_next, o_s.node_id)
-            + path.get_distance_by_node_ids(d_f_prev, d_f.node_id)
-            + path.get_distance_by_node_ids(d_s_next, d_s.node_id)
-        )
-        after = (
-            path.get_distance_by_node_ids(o_f_prev, o_s.node_id)
-            + path.get_distance_by_node_ids(o_s_next, o_f.node_id)
-            + path.get_distance_by_node_ids(d_f_prev, d_s.node_id)
-            + path.get_distance_by_node_ids(d_s_next, d_f.node_id)
-        )
-
-    # Of,Os,Df,Ds
-    elif o_fs_is_neighbor and od_sf_is_neighbor and d_sf_is_neighbor:
-        before = (
-            path.get_distance_by_node_ids(o_f_prev, o_f.node_id)
-            + path.get_distance_by_node_ids(o_s.node_id, d_f.node_id)
-            + path.get_distance_by_node_ids(d_s_next, d_s.node_id)
-        ) 
-        after = (
-            path.get_distance_by_node_ids(o_f_prev, o_s.node_id)
-            + path.get_distance_by_node_ids(o_f.node_id, d_s.node_id)
-            + path.get_distance_by_node_ids(d_s_next, d_f.node_id)
-        )
-
-    # Of,Os,Df,...,Ds
-    elif o_fs_is_neighbor and od_sf_is_neighbor and not d_sf_is_neighbor:
-        before = (
-            path.get_distance_by_node_ids(o_f_prev, o_f.node_id)
-            + path.get_distance_by_node_ids(o_s.node_id, d_f.node_id)
-            + path.get_distance_by_node_ids(d_f_next, d_f.node_id)
-            + path.get_distance_by_node_ids(d_s_prev, d_s.node_id)
-            + path.get_distance_by_node_ids(d_s_next, d_s.node_id)
-        ) 
-        after = (
-            path.get_distance_by_node_ids(o_f_prev, o_s.node_id)
-            + path.get_distance_by_node_ids(o_f.node_id, d_s.node_id)
-            + path.get_distance_by_node_ids(d_f_next, d_s.node_id)
-            + path.get_distance_by_node_ids(d_s_prev, d_f.node_id)
-            + path.get_distance_by_node_ids(d_s_next, d_f.node_id)
-        )
-
-    # Of,...,Os,...,Df,...,Ds
-    elif not o_fs_is_neighbor and not od_sf_is_neighbor and not d_sf_is_neighbor:
-        before = (
-            path.get_distance_by_node_ids(o_f_prev, o_f.node_id)
-            + path.get_distance_by_node_ids(o_f_next, o_f.node_id)
-            + path.get_distance_by_node_ids(o_s_prev, o_s.node_id)
-            + path.get_distance_by_node_ids(o_s_next, o_s.node_id)
-            + path.get_distance_by_node_ids(d_f_prev, d_f.node_id)
-            + path.get_distance_by_node_ids(d_f_next, d_f.node_id)
-            + path.get_distance_by_node_ids(d_s_prev, d_s.node_id)
-            + path.get_distance_by_node_ids(d_s_next, d_s.node_id)
-        ) 
-        after = (
-            path.get_distance_by_node_ids(o_f_prev, o_s.node_id)
-            + path.get_distance_by_node_ids(o_f_next, o_s.node_id)
-            + path.get_distance_by_node_ids(o_s_prev, o_f.node_id)
-            + path.get_distance_by_node_ids(o_s_next, o_f.node_id)
-            + path.get_distance_by_node_ids(d_f_prev, d_s.node_id)
-            + path.get_distance_by_node_ids(d_f_next, d_s.node_id)
-            + path.get_distance_by_node_ids(d_s_prev, d_f.node_id)
-            + path.get_distance_by_node_ids(d_s_next, d_f.node_id)
-        )
-
-    # Of,...,Os,...,Df,Ds
-    elif not o_fs_is_neighbor and not od_sf_is_neighbor and d_sf_is_neighbor:
-        before = (
-            path.get_distance_by_node_ids(o_f_prev, o_f.node_id)
-            + path.get_distance_by_node_ids(o_f_next, o_f.node_id)
-            + path.get_distance_by_node_ids(o_s_prev, o_s.node_id)
-            + path.get_distance_by_node_ids(o_s_next, o_s.node_id)
-            + path.get_distance_by_node_ids(d_f_prev, d_f.node_id)
-            + path.get_distance_by_node_ids(d_s_next, d_s.node_id)
-        ) 
-        after = (
-            path.get_distance_by_node_ids(o_f_prev, o_s.node_id)
-            + path.get_distance_by_node_ids(o_f_next, o_s.node_id)
-            + path.get_distance_by_node_ids(o_s_prev, o_f.node_id)
-            + path.get_distance_by_node_ids(o_s_next, o_f.node_id)
-            + path.get_distance_by_node_ids(d_f_prev, d_s.node_id)
-            + path.get_distance_by_node_ids(d_s_next, d_f.node_id)
-        ) 
-
-    # Of,...,Os,Df,Ds
-    elif not o_fs_is_neighbor and od_sf_is_neighbor and d_sf_is_neighbor:
-        before = (
-            path.get_distance_by_node_ids(o_f_prev, o_f.node_id)
-            + path.get_distance_by_node_ids(o_f_next, o_f.node_id)
-            + path.get_distance_by_node_ids(o_s_prev, o_s.node_id)
-            + path.get_distance_by_node_ids(o_s.node_id, d_f.node_id)
-            + path.get_distance_by_node_ids(d_s_next, d_s.node_id)
-        ) 
-        after = (
-            path.get_distance_by_node_ids(o_f_prev, o_s.node_id)
-            + path.get_distance_by_node_ids(o_f_next, o_s.node_id)
-            + path.get_distance_by_node_ids(o_s_prev, o_f.node_id)
-            + path.get_distance_by_node_ids(o_f.node_id, d_s.node_id)
-            + path.get_distance_by_node_ids(d_s_next, d_f.node_id)
-        )
-
-    # Of,...,Os,Df,...,Ds
-    elif not o_fs_is_neighbor and od_sf_is_neighbor and not d_sf_is_neighbor:
-        before = (
-            path.get_distance_by_node_ids(o_f_prev, o_f.node_id)
-            + path.get_distance_by_node_ids(o_f_next, o_f.node_id)
-            + path.get_distance_by_node_ids(o_s_prev, o_s.node_id)
-            + path.get_distance_by_node_ids(o_s.node_id, d_f.node_id)
-            + path.get_distance_by_node_ids(d_s_prev, d_s.node_id)
-            + path.get_distance_by_node_ids(d_s_next, d_s.node_id)
-        ) 
-        after = (
-            path.get_distance_by_node_ids(o_f_prev, o_s.node_id)
-            + path.get_distance_by_node_ids(o_f_next, o_s.node_id)
-            + path.get_distance_by_node_ids(o_s_prev, o_f.node_id)
-            + path.get_distance_by_node_ids(o_f.node_id, d_s.node_id)
-            + path.get_distance_by_node_ids(d_s_prev, d_f.node_id)
-            + path.get_distance_by_node_ids(d_s_next, d_f.node_id)
-        ) 
-
-    delta = after - before
-    label = o1.node_id, o2.node_id
-    return delta, label
-
 
 class Operator:
     def __init__(self, operator_type: str):
@@ -653,6 +443,7 @@ class ODPairsExchangeOperator(Operator):
                 if inner_min_delta < min_delta:
                     min_delta = inner_min_delta
                     label = inner_label
+        
         if label is None:
             return None, None, None
         else:
@@ -689,3 +480,323 @@ class RandomODPairsExchangeOperator(Operator):
             improved_path = solution.exchange_nodes_within_path(node1_id, node2_id, path_id, path) # Path modified in-place
             improved_path = solution.exchange_nodes_within_path(path.OD_mapping[node1_id], path.OD_mapping[node2_id], path_id, improved_path)
         return improved_path, delta, True
+
+
+def _compute_delta_pair_exchange(o1: Node, o2: Node, path: MultiODPath):
+    label, delta = None, 0.
+
+    o1_id = o1.node_id
+    o2_id = o2.node_id
+    d1 = path.get_by_node_id(path.OD_mapping[o1_id])
+    d2 = path.get_by_node_id(path.OD_mapping[o2_id])
+    if o1.seq_id > o2.seq_id:
+        o_f, o_s = o2, o1 
+    else:
+        o_f, o_s = o1, o2 
+    if d1.seq_id > d2.seq_id:
+        d_f, d_s = d2, d1 
+    else:
+        d_f, d_s = d1, d2 
+    o_f_prev, o_f_next = o_f.prev_node.node_id, o_f.next_node.node_id
+    o_s_prev, o_s_next = o_s.prev_node.node_id, o_s.next_node.node_id 
+    d_f_prev, d_f_next = d_f.prev_node.node_id, d_f.next_node.node_id
+    d_s_prev, d_s_next = d_s.prev_node.node_id, d_s.next_node.node_id if d_s.next_node is not None else 0
+    
+    o_f_nseq, o_s_nseq, d_f_nseq = o_f.seq_id + 1, o_s.seq_id + 1, d_f.seq_id + 1
+    o_fs_is_neighbor, od_sf_is_neighbor, d_sf_is_neighbor = o_f_nseq == o_s.seq_id, o_s_nseq == d_f.seq_id, d_f_nseq == d_s.seq_id
+    od_f_is_neighbor, do_fs_is_neighbor, od_s_is_neighbor = o_f_nseq == d_f.seq_id, d_f_nseq == o_s.seq_id, o_s_nseq == d_s.seq_id
+
+    if o_s.seq_id < d_f.seq_id:
+        # Of,Os,...,Df,...,Ds
+        if o_fs_is_neighbor and not od_sf_is_neighbor and not d_sf_is_neighbor:
+            before = (
+                path.get_distance_by_node_ids(o_f_prev, o_f.node_id)
+                + path.get_distance_by_node_ids(o_s_next, o_s.node_id)
+                + path.get_distance_by_node_ids(d_f_prev, d_f.node_id)
+                + path.get_distance_by_node_ids(d_f_next, d_f.node_id)
+                + path.get_distance_by_node_ids(d_s_prev, d_s.node_id)
+                + path.get_distance_by_node_ids(d_s_next, d_s.node_id)
+            )
+            after = (
+                path.get_distance_by_node_ids(o_f_prev, o_s.node_id)
+                + path.get_distance_by_node_ids(o_s_next, o_f.node_id)
+                + path.get_distance_by_node_ids(d_f_prev, d_s.node_id)
+                + path.get_distance_by_node_ids(d_f_next, d_s.node_id)
+                + path.get_distance_by_node_ids(d_s_prev, d_f.node_id)
+                + path.get_distance_by_node_ids(d_s_next, d_f.node_id)
+            )
+        
+        # Of,Os,...,Df,Ds
+        elif o_fs_is_neighbor and not od_sf_is_neighbor and d_sf_is_neighbor:
+            before = (
+                path.get_distance_by_node_ids(o_f_prev, o_f.node_id)
+                + path.get_distance_by_node_ids(o_s_next, o_s.node_id)
+                + path.get_distance_by_node_ids(d_f_prev, d_f.node_id)
+                + path.get_distance_by_node_ids(d_s_next, d_s.node_id)
+            )
+            after = (
+                path.get_distance_by_node_ids(o_f_prev, o_s.node_id)
+                + path.get_distance_by_node_ids(o_s_next, o_f.node_id)
+                + path.get_distance_by_node_ids(d_f_prev, d_s.node_id)
+                + path.get_distance_by_node_ids(d_s_next, d_f.node_id)
+            )
+
+        # Of,Os,Df,Ds
+        elif o_fs_is_neighbor and od_sf_is_neighbor and d_sf_is_neighbor:
+            before = (
+                path.get_distance_by_node_ids(o_f_prev, o_f.node_id)
+                + path.get_distance_by_node_ids(o_s.node_id, d_f.node_id)
+                + path.get_distance_by_node_ids(d_s_next, d_s.node_id)
+            ) 
+            after = (
+                path.get_distance_by_node_ids(o_f_prev, o_s.node_id)
+                + path.get_distance_by_node_ids(o_f.node_id, d_s.node_id)
+                + path.get_distance_by_node_ids(d_s_next, d_f.node_id)
+            )
+
+        # Of,Os,Df,...,Ds
+        elif o_fs_is_neighbor and od_sf_is_neighbor and not d_sf_is_neighbor:
+            before = (
+                path.get_distance_by_node_ids(o_f_prev, o_f.node_id)
+                + path.get_distance_by_node_ids(o_s.node_id, d_f.node_id)
+                + path.get_distance_by_node_ids(d_f_next, d_f.node_id)
+                + path.get_distance_by_node_ids(d_s_prev, d_s.node_id)
+                + path.get_distance_by_node_ids(d_s_next, d_s.node_id)
+            ) 
+            after = (
+                path.get_distance_by_node_ids(o_f_prev, o_s.node_id)
+                + path.get_distance_by_node_ids(o_f.node_id, d_s.node_id)
+                + path.get_distance_by_node_ids(d_f_next, d_s.node_id)
+                + path.get_distance_by_node_ids(d_s_prev, d_f.node_id)
+                + path.get_distance_by_node_ids(d_s_next, d_f.node_id)
+            )
+
+        # Of,...,Os,...,Df,...,Ds
+        elif not o_fs_is_neighbor and not od_sf_is_neighbor and not d_sf_is_neighbor:
+            before = (
+                path.get_distance_by_node_ids(o_f_prev, o_f.node_id)
+                + path.get_distance_by_node_ids(o_f_next, o_f.node_id)
+                + path.get_distance_by_node_ids(o_s_prev, o_s.node_id)
+                + path.get_distance_by_node_ids(o_s_next, o_s.node_id)
+                + path.get_distance_by_node_ids(d_f_prev, d_f.node_id)
+                + path.get_distance_by_node_ids(d_f_next, d_f.node_id)
+                + path.get_distance_by_node_ids(d_s_prev, d_s.node_id)
+                + path.get_distance_by_node_ids(d_s_next, d_s.node_id)
+            ) 
+            after = (
+                path.get_distance_by_node_ids(o_f_prev, o_s.node_id)
+                + path.get_distance_by_node_ids(o_f_next, o_s.node_id)
+                + path.get_distance_by_node_ids(o_s_prev, o_f.node_id)
+                + path.get_distance_by_node_ids(o_s_next, o_f.node_id)
+                + path.get_distance_by_node_ids(d_f_prev, d_s.node_id)
+                + path.get_distance_by_node_ids(d_f_next, d_s.node_id)
+                + path.get_distance_by_node_ids(d_s_prev, d_f.node_id)
+                + path.get_distance_by_node_ids(d_s_next, d_f.node_id)
+            )
+
+        # Of,...,Os,...,Df,Ds
+        elif not o_fs_is_neighbor and not od_sf_is_neighbor and d_sf_is_neighbor:
+            before = (
+                path.get_distance_by_node_ids(o_f_prev, o_f.node_id)
+                + path.get_distance_by_node_ids(o_f_next, o_f.node_id)
+                + path.get_distance_by_node_ids(o_s_prev, o_s.node_id)
+                + path.get_distance_by_node_ids(o_s_next, o_s.node_id)
+                + path.get_distance_by_node_ids(d_f_prev, d_f.node_id)
+                + path.get_distance_by_node_ids(d_s_next, d_s.node_id)
+            ) 
+            after = (
+                path.get_distance_by_node_ids(o_f_prev, o_s.node_id)
+                + path.get_distance_by_node_ids(o_f_next, o_s.node_id)
+                + path.get_distance_by_node_ids(o_s_prev, o_f.node_id)
+                + path.get_distance_by_node_ids(o_s_next, o_f.node_id)
+                + path.get_distance_by_node_ids(d_f_prev, d_s.node_id)
+                + path.get_distance_by_node_ids(d_s_next, d_f.node_id)
+            ) 
+
+        # Of,...,Os,Df,Ds
+        elif not o_fs_is_neighbor and od_sf_is_neighbor and d_sf_is_neighbor:
+            before = (
+                path.get_distance_by_node_ids(o_f_prev, o_f.node_id)
+                + path.get_distance_by_node_ids(o_f_next, o_f.node_id)
+                + path.get_distance_by_node_ids(o_s_prev, o_s.node_id)
+                + path.get_distance_by_node_ids(o_s.node_id, d_f.node_id)
+                + path.get_distance_by_node_ids(d_s_next, d_s.node_id)
+            ) 
+            after = (
+                path.get_distance_by_node_ids(o_f_prev, o_s.node_id)
+                + path.get_distance_by_node_ids(o_f_next, o_s.node_id)
+                + path.get_distance_by_node_ids(o_s_prev, o_f.node_id)
+                + path.get_distance_by_node_ids(o_f.node_id, d_s.node_id)
+                + path.get_distance_by_node_ids(d_s_next, d_f.node_id)
+            )
+
+        # Of,...,Os,Df,...,Ds
+        elif not o_fs_is_neighbor and od_sf_is_neighbor and not d_sf_is_neighbor:
+            before = (
+                path.get_distance_by_node_ids(o_f_prev, o_f.node_id)
+                + path.get_distance_by_node_ids(o_f_next, o_f.node_id)
+                + path.get_distance_by_node_ids(o_s_prev, o_s.node_id)
+                + path.get_distance_by_node_ids(o_s.node_id, d_f.node_id)
+                + path.get_distance_by_node_ids(d_s_prev, d_s.node_id)
+                + path.get_distance_by_node_ids(d_s_next, d_s.node_id)
+            ) 
+            after = (
+                path.get_distance_by_node_ids(o_f_prev, o_s.node_id)
+                + path.get_distance_by_node_ids(o_f_next, o_s.node_id)
+                + path.get_distance_by_node_ids(o_s_prev, o_f.node_id)
+                + path.get_distance_by_node_ids(o_f.node_id, d_s.node_id)
+                + path.get_distance_by_node_ids(d_s_prev, d_f.node_id)
+                + path.get_distance_by_node_ids(d_s_next, d_f.node_id)
+            ) 
+    else:
+        # Of,Df,Os,Ds
+        if od_f_is_neighbor and do_fs_is_neighbor and od_s_is_neighbor:
+            before = (
+                path.get_distance_by_node_ids(o_f_prev, o_f.node_id)
+                + path.get_distance_by_node_ids(o_s.node_id, d_f.node_id)
+                + path.get_distance_by_node_ids(d_s_next, d_s.node_id)
+            ) 
+            after = (
+                path.get_distance_by_node_ids(o_f_prev, o_s.node_id)
+                + path.get_distance_by_node_ids(o_f.node_id, d_s.node_id)
+                + path.get_distance_by_node_ids(d_s_next, d_f.node_id)
+            )
+
+        # Of,...,Df,Os,Ds
+        elif not od_f_is_neighbor and do_fs_is_neighbor and od_s_is_neighbor:
+            before = (
+                path.get_distance_by_node_ids(o_f_prev, o_f.node_id)
+                + path.get_distance_by_node_ids(o_f_next, o_f.node_id)
+                + path.get_distance_by_node_ids(d_f_prev, d_f.node_id)
+                + path.get_distance_by_node_ids(d_f.node_id, o_s.node_id)
+                + path.get_distance_by_node_ids(o_s.node_id, d_s.node_id)
+                + path.get_distance_by_node_ids(d_s_next, d_s.node_id)
+            ) 
+            after = (
+                path.get_distance_by_node_ids(o_f_prev, o_s.node_id)
+                + path.get_distance_by_node_ids(o_f_next, o_s.node_id)
+                + path.get_distance_by_node_ids(d_f_prev, d_s.node_id)
+                + path.get_distance_by_node_ids(d_f.node_id, o_f.node_id)
+                + path.get_distance_by_node_ids(o_f.node_id, d_s.node_id)
+                + path.get_distance_by_node_ids(d_s_next, d_f.node_id)
+            )
+
+        # Of,...,Df,...,Os,Ds
+        elif not od_f_is_neighbor and not do_fs_is_neighbor and od_s_is_neighbor:
+            before = (
+                path.get_distance_by_node_ids(o_f_prev, o_f.node_id)
+                + path.get_distance_by_node_ids(o_f_next, o_f.node_id)
+                + path.get_distance_by_node_ids(d_f_prev, d_f.node_id)
+                + path.get_distance_by_node_ids(d_f_next, d_f.node_id)
+                + path.get_distance_by_node_ids(o_s_prev, o_s.node_id)
+                + path.get_distance_by_node_ids(o_s.node_id, d_s.node_id)
+                + path.get_distance_by_node_ids(d_s_next, d_s.node_id)
+            ) 
+            after = (
+                path.get_distance_by_node_ids(o_f_prev, o_s.node_id)
+                + path.get_distance_by_node_ids(o_f_next, o_s.node_id)
+                + path.get_distance_by_node_ids(d_f_prev, d_s.node_id)
+                + path.get_distance_by_node_ids(d_f_next, d_s.node_id)
+                + path.get_distance_by_node_ids(o_s_prev, o_f.node_id)
+                + path.get_distance_by_node_ids(o_f.node_id, d_f.node_id)
+                + path.get_distance_by_node_ids(d_s_next, d_f.node_id)
+            )  
+
+        # Of,...,Df,...,Os,...,Ds
+        elif not od_f_is_neighbor and not do_fs_is_neighbor and not od_s_is_neighbor:
+            before = (
+                path.get_distance_by_node_ids(o_f_prev, o_f.node_id)
+                + path.get_distance_by_node_ids(o_f_next, o_f.node_id)
+                + path.get_distance_by_node_ids(o_s_prev, o_s.node_id)
+                + path.get_distance_by_node_ids(o_s_next, o_s.node_id)
+                + path.get_distance_by_node_ids(d_f_prev, d_f.node_id)
+                + path.get_distance_by_node_ids(d_f_next, d_f.node_id)
+                + path.get_distance_by_node_ids(d_s_prev, d_s.node_id)
+                + path.get_distance_by_node_ids(d_s_next, d_s.node_id)
+            ) 
+            after = (
+                path.get_distance_by_node_ids(o_f_prev, o_s.node_id)
+                + path.get_distance_by_node_ids(o_f_next, o_s.node_id)
+                + path.get_distance_by_node_ids(o_s_prev, o_f.node_id)
+                + path.get_distance_by_node_ids(o_s_next, o_f.node_id)
+                + path.get_distance_by_node_ids(d_f_prev, d_s.node_id)
+                + path.get_distance_by_node_ids(d_f_next, d_s.node_id)
+                + path.get_distance_by_node_ids(d_s_prev, d_f.node_id)
+                + path.get_distance_by_node_ids(d_s_next, d_f.node_id)
+            )
+
+        # Of,Df,...,Os,Ds
+        elif od_f_is_neighbor and not do_fs_is_neighbor and od_s_is_neighbor:
+            before = (
+                path.get_distance_by_node_ids(o_f_prev, o_f.node_id)
+                + path.get_distance_by_node_ids(d_f_next, d_f.node_id)
+                + path.get_distance_by_node_ids(o_s_prev, o_s.node_id)
+                + path.get_distance_by_node_ids(d_s_next, d_s.node_id)
+            )
+            after = (
+                path.get_distance_by_node_ids(o_f_prev, o_s.node_id)
+                + path.get_distance_by_node_ids(d_f_next, d_s.node_id)
+                + path.get_distance_by_node_ids(o_s_prev, o_f.node_id)
+                + path.get_distance_by_node_ids(d_s_next, d_f.node_id)
+            )
+
+        # Of,Df,...,Os,...,Ds
+        elif od_f_is_neighbor and not do_fs_is_neighbor and not od_s_is_neighbor:
+            before = (
+                path.get_distance_by_node_ids(o_f_prev, o_f.node_id)
+                + path.get_distance_by_node_ids(d_f_next, d_f.node_id)
+                + path.get_distance_by_node_ids(o_s_prev, o_s.node_id)
+                + path.get_distance_by_node_ids(o_s_next, o_s.node_id)
+                + path.get_distance_by_node_ids(d_s_prev, d_s.node_id)
+                + path.get_distance_by_node_ids(d_s_next, d_s.node_id)
+            )
+            after = (
+                path.get_distance_by_node_ids(o_f_prev, o_s.node_id)
+                + path.get_distance_by_node_ids(d_f_next, d_s.node_id)
+                + path.get_distance_by_node_ids(o_s_prev, o_f.node_id)
+                + path.get_distance_by_node_ids(o_s_next, o_f.node_id)
+                + path.get_distance_by_node_ids(d_s_prev, d_f.node_id)
+                + path.get_distance_by_node_ids(d_s_next, d_f.node_id)
+            )
+
+        # Of,Df,Os,...,Ds
+        elif od_f_is_neighbor and do_fs_is_neighbor and not od_s_is_neighbor:
+            before = (
+                path.get_distance_by_node_ids(o_f_prev, o_f.node_id)
+                + path.get_distance_by_node_ids(o_f.node_id, d_f.node_id)
+                + path.get_distance_by_node_ids(o_s.node_id, d_f.node_id)
+                + path.get_distance_by_node_ids(o_s_next, o_s.node_id)
+                + path.get_distance_by_node_ids(d_s_prev, d_s.node_id)
+                + path.get_distance_by_node_ids(d_s_next, d_s.node_id)
+            ) 
+            after = (
+                path.get_distance_by_node_ids(o_f_prev, o_s.node_id)
+                + path.get_distance_by_node_ids(o_f.node_id, d_s.node_id)
+                + path.get_distance_by_node_ids(o_s.node_id, d_s.node_id)
+                + path.get_distance_by_node_ids(o_s_next, o_f.node_id)
+                + path.get_distance_by_node_ids(d_s_prev, d_f.node_id)
+                + path.get_distance_by_node_ids(d_s_next, d_f.node_id)
+            )
+
+        # Of,...,Df,Os,...,Ds
+        elif not od_f_is_neighbor and do_fs_is_neighbor and not od_s_is_neighbor:
+            before = (
+                path.get_distance_by_node_ids(o_f_prev, o_f.node_id)
+                + path.get_distance_by_node_ids(o_f_next, o_f.node_id)
+                + path.get_distance_by_node_ids(d_f_prev, d_f.node_id)
+                + path.get_distance_by_node_ids(o_s.node_id, d_f.node_id)
+                + path.get_distance_by_node_ids(d_s_prev, d_s.node_id)
+                + path.get_distance_by_node_ids(d_s_next, d_s.node_id)
+            ) 
+            after = (
+                path.get_distance_by_node_ids(o_f_prev, o_s.node_id)
+                + path.get_distance_by_node_ids(o_f_next, o_s.node_id)
+                + path.get_distance_by_node_ids(d_f_prev, d_s.node_id)
+                + path.get_distance_by_node_ids(o_f.node_id, d_s.node_id)
+                + path.get_distance_by_node_ids(d_s_prev, d_f.node_id)
+                + path.get_distance_by_node_ids(d_s_next, d_f.node_id)
+            ) 
+
+    delta = after - before
+    label = o1.node_id, o2.node_id
+    return delta, label

@@ -18,6 +18,9 @@ class Action:
         improved_solution = copy.deepcopy(env.solution) 
         all_delta = 0.
         return improved_solution, all_delta
+    
+    def __repr__(self) -> str:
+        return f'{type(self).__name__}({type(self.operator).__name__})'
 
 
 class InBlockAction(Action):

@@ -2,6 +2,7 @@ import random
 from collections import deque, defaultdict
 from itertools import islice
 
+import jax 
 import numpy as np
 import matplotlib.pyplot as plt 
 import matplotlib.cm as cm
@@ -16,6 +17,12 @@ class SliceableDeque(deque):
             return type(self)(islice(self, index.start,
                                                index.stop, index.step))
         return deque.__getitem__(self, index)
+
+jax.tree_util.register_pytree_node(
+  SliceableDeque,
+  flatten_func=lambda sd: (sd, None),
+  unflatten_func=lambda treedef, leaves: SliceableDeque(leaves)
+)    
     
 
 def random_split_dict(d, num_splits):
