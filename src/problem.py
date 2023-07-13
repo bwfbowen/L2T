@@ -62,7 +62,6 @@ class MultiODProblem(Problem):
 
     def __init__(self, num_O: int = 10, num_taxi: int = 1, locations: dict = None, seed: int = 0, 
                  ignore_from_dummy_cost: bool = True, ignore_to_dummy_cost: bool = True):
-        self.num_taxi = num_taxi
         self.distance_matrix, self.O, self.D, self.locations, self.node_index = self.generate_problem(num_O=num_O, num_taxi=num_taxi, locations=locations, seed=seed, ignore_from_dummy_cost=ignore_from_dummy_cost, ignore_to_dummy_cost=ignore_to_dummy_cost)
         self.OD_mapping = self.generate_OD_mapping(self.O, self.D)
     
@@ -108,6 +107,9 @@ class MultiODProblem(Problem):
         else:
             total_num_points = num_O * 2 + num_taxi + 1  # 1 for the dummy starting point
             _locations = np.random.uniform(size=(total_num_points, 2))  # (x,y)
+        self.num_O = num_O
+        self.num_taxi = num_taxi
+        self.total_num_points = total_num_points
         locs = copy.deepcopy(_locations)
         node_index = [*range(len(locs))]
         # >=py38 feature
