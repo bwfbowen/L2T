@@ -59,7 +59,9 @@ def ortools_formulation_2D(p, name: str = 'MultiOD'):
     return X, solver
 
 def ortools_pd_formulation_2D(p, name: str = 'MultiOD'):
-    distance_matrix = p.distance_matrix[1:, 1:].tolist()
+
+    p.convert_distance_matrix_to_int()
+    distance_matrix = np.delete(np.delete(p.distance_matrix, 1, axis=0), 1, axis=1).tolist()
 
     # Create the routing index manager.
     manager = pywrapcp.RoutingIndexManager(len(distance_matrix),
