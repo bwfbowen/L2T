@@ -127,7 +127,8 @@ class MultiODProblem(Problem):
 
     # convert distance_matrix elements to integers
     def convert_distance_matrix_to_int(self):
-        self.distance_matrix = np.multiply(self.distance_matrix, 100).astype(int)
+        # self.distance_matrix = np.multiply(self.distance_matrix, 100).astype(int)
+        self.distance_matrix = self.distance_matrix.astype(int)
     
     def generate_OD_mapping(self, O, D):
         """Gets OD mapping.
