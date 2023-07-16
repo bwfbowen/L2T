@@ -119,10 +119,16 @@ class MultiODProblem(Problem):
         distance_matrix = np.linalg.norm(locs[edge_index[0]] - locs[edge_index[1]],
                                               ord=2, axis=1).reshape(len(node_index), len(node_index))
         if ignore_from_dummy_cost:
-            distance_matrix[0, :] = 0.
+            distance_matrix[0, :] = 1
         if ignore_to_dummy_cost:
-            distance_matrix[:, 0] = 0.
+            distance_matrix[:, 0] = 1
+
         return distance_matrix, O, D, locs, node_index
+
+    # convert distance_matrix elements to integers
+    def convert_distance_matrix_to_int(self):
+        # self.distance_matrix = np.multiply(self.distance_matrix, 100).astype(int)
+        self.distance_matrix = self.distance_matrix.astype(int)
     
     def generate_OD_mapping(self, O, D):
         """Gets OD mapping.
