@@ -1,7 +1,0 @@
-The result for random-010-31073.tsp
-Objective: 451369
-Route for vehicle 0:
- 1 ->  3 ->  9 ->  5 ->  8 ->  10 ->  6 ->  2 ->  12 ->  20 ->  13 ->  4 ->  11 ->  16 ->  18 ->  21 ->  14 ->  15 ->  19 ->  7 ->  17 -> 1
-Distance of the route: 4469m
-Total Distance of all routes: 4469m
-Time taken: 0.050106048583984375 seconds
