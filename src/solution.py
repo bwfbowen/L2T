@@ -346,7 +346,7 @@ class MultiODSolution(Solution):
             del path.block_dict[to_merge_block_id]
     
     def _reassign_block_attrs_before_insert(self, path: MultiODPath, node: Node):
-        prev_next_not_none = not node.prev_node is None and not node.next_node is None
+        prev_next_not_none = not node.prev_node.block_id is None and not node.next_node is None
         prev_next_same_type_diff_from_node = node.prev_node.OD_type != node.OD_type and node.next_node.OD_type != node.OD_type
         if prev_next_not_none and prev_next_same_type_diff_from_node:
             merge_block_id = node.prev_node.block_id

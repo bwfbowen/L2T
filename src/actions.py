@@ -38,6 +38,7 @@ class InBlockAction(Action):
                     improved_path, delta, modified = self._update(improved_solution, block_id, path_id)
                     if modified:
                         all_delta += delta
+            
         return improved_solution, all_delta
     
     def _update(self, solution: MultiODSolution, block_id: int, path_id: int = 0):
@@ -57,6 +58,7 @@ class PathAction(Action):
             modified = True 
             while modified:
                 improved_path, delta, modified = self._update(improved_solution, path_id)
+                
                 if modified:
                     all_delta += delta 
         return improved_solution, all_delta
@@ -77,5 +79,6 @@ class PathRandomAction(Action):
         all_delta = 0.
         for path_id, path in enumerate(improved_solution.paths):
             improved_path, delta, _ = self.operator(solution=improved_solution, path_id=path_id)
+            
             all_delta += delta 
         return improved_solution, all_delta

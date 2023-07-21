@@ -87,11 +87,10 @@ def ortools_pd_formulation_2D(p, name: str = 'MultiOD'):
     routing.AddDimension(
         transit_callback_index,
         0,  # no slack
-        int(1e5),  # vehicle maximum travel distance
+        int(1e7),  # vehicle maximum travel distance
         True,  # start cumul to zero
         dimension_name)
     distance_dimension = routing.GetDimensionOrDie(dimension_name)
-    distance_dimension.SetGlobalSpanCostCoefficient(100)
 
     # Define Transportation Requests.
     for O_index, D_index in p.OD_mapping.items():
