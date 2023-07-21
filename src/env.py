@@ -52,26 +52,41 @@ class MultiODEnv(gym.Env):
         super().__init__()
         self.problem = problem if problem is not None else MultiODProblem(num_O=num_O, num_taxi=num_taxi, locations=locations, seed=seed)
         self._action_dict = action_dict if action_dict is not None else get_default_action_dict(self)
+        self.action_space = gym.spaces.Discrete(len(self._action_dict))
+        self.observation_space = gym.spaces.Dict(
+            {'problem': gym.spaces.Box(low=np.array([-np.inf, -np.inf] + [0] * k_recent + [-1] * k_recent), 
+                                       high=np.array([np.inf, np.inf] + [len(self._action_dict) - 1] * k_recent + [1] * k_recent),
+                                       shape=(2 + k_recent * 2,), 
+                                       dtype=np.float32),
+            'solution': gym.spaces.Box(low=np.ones((self.problem.num_O * 2, 12)) * np.array([0] * 6 + [0] * 3 + [0] * 3), 
+                                       high=np.ones((self.problem.num_O * 2, 12)) * np.array([1e3] * 6 + [1e4] * 3 + [1] * 3), 
+                                       shape=(self.problem.num_O * 2, 12),
+                                       dtype=np.float32)})
         self._max_length = max_length
         self._k_recent = k_recent
     
     def step(self, action: int):
+        
         self._step += 1
         self.solution, all_delta = self.action_dict[action](self)
-        next_obs = self.generate_state(self.solution)
+        next_obs = {}
+        next_obs['solution'] = self.generate_state(self.solution)
         reward, done = self._calc_reward(all_delta), self._calc_done(self._step)
         self._update_history_buffer(action, all_delta)
         infos = self._calc_infos(all_delta, self._history_action_buffer, self._history_delta_sign)
         if infos['cost'] < self.best_cost:
             self._update_best_solution(self.solution, infos, self._step)
-        return next_obs, reward, done, infos
+        next_obs['problem'] = np.array([infos['delta'], infos['delta_best'], *infos['k_recent_action'], *infos['k_recent_delta_sign']], dtype=np.float32)
+        return next_obs, reward, done, done, infos
         
-    def reset(self):
+    def reset(self, seed=None, options=None):
         self._step = 0
         self.solution = self.problem.generate_feasible_solution()
         self._reset_history_buffer()
         self._reset_best_solution(self.solution)
-        obs, infos = self.generate_state(self.solution), self._calc_infos(k_recent_action=self._history_action_buffer, k_recent_delta_sign=self._history_delta_sign)
+        obs = {}
+        obs['solution'], infos = self.generate_state(self.solution), self._calc_infos(k_recent_action=self._history_action_buffer, k_recent_delta_sign=self._history_delta_sign)
+        obs['problem'] = np.array([infos['delta'], infos['delta_best'], *infos['k_recent_action'], *infos['k_recent_delta_sign']])
         return obs, infos
 
     def render(self, mode='human', *, figsize: tuple = (8, 6), dpi: float = 80, fig_name: str = None, to_annotate: bool = True, quiver_width: float = 5e-3):
@@ -105,12 +120,12 @@ class MultiODEnv(gym.Env):
         self._history_delta_sign = SliceableDeque([0. for _ in range(self._k_recent)], maxlen=self._k_recent)
     
     def _reset_best_solution(self, solution):
-        self.best_solution = self.get_np_repr_of_solution(solution)
+        self.best_solution = self.get_repr_of_solution(solution)
         self.best_cost = self.problem.calc_cost(solution)
         self.best_sol_at_step = 0
 
     def _update_best_solution(self, solution, infos, step):
-        self.best_solution = self.get_np_repr_of_solution(solution)
+        self.best_solution = self.get_repr_of_solution(solution)
         self.best_cost = infos['cost']
         self.best_sol_at_step = step
     
@@ -121,11 +136,11 @@ class MultiODEnv(gym.Env):
     def generate_state(self, solution):
         return self.calc_features_of_solution(solution)
     
-    def get_np_repr_of_solution(self, solution):
-        return np.asarray([[*iter(path)] for path in solution.paths]) 
+    def get_repr_of_solution(self, solution):
+        return [[*iter(path)] for path in solution.paths]
     
     def calc_features_of_solution(self, solution):
-        features = np.zeros((self.problem.num_O * 2, 12))
+        features = np.zeros((self.problem.num_O * 2, 12), dtype=np.float32)
         for path in solution:
             n = len(path) - 1
             for i in range(2, n):

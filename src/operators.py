@@ -72,7 +72,7 @@ class SegmentTwoOptOperator(Operator):
         path: MultiODPath = solution.paths[path_id]
         n = len(path) - 1
 
-        segment_starts, temp_Ds = SliceableDeque([2]), set([path.OD_mapping[2]])
+        segment_starts, temp_Ds = SliceableDeque([2]), set([path.OD_mapping[path.get_by_seq_id(2).node_id]])
         for seq_id in range(3, n):
             node_id = path.get_by_seq_id(seq_id).node_id
             if node_id in path.OD_mapping:
@@ -443,10 +443,10 @@ class ODPairsExchangeOperator(Operator):
                 if inner_min_delta < min_delta:
                     min_delta = inner_min_delta
                     label = inner_label
-        
         if label is None:
             return None, None, None
         else:
+            
             improved_path = solution.exchange_nodes_within_path(label[0], label[1], path_id, path)
             improved_path = solution.exchange_nodes_within_path(path.OD_mapping[label[0]], path.OD_mapping[label[1]], path_id, improved_path)
             return improved_path, min_delta, label
@@ -637,6 +637,7 @@ def _compute_delta_pair_exchange(o1: Node, o2: Node, path: MultiODPath):
                 + path.get_distance_by_node_ids(o_f_next, o_f.node_id)
                 + path.get_distance_by_node_ids(o_s_prev, o_s.node_id)
                 + path.get_distance_by_node_ids(o_s.node_id, d_f.node_id)
+                + path.get_distance_by_node_ids(d_f_next, d_f.node_id)
                 + path.get_distance_by_node_ids(d_s_prev, d_s.node_id)
                 + path.get_distance_by_node_ids(d_s_next, d_s.node_id)
             ) 
@@ -645,6 +646,7 @@ def _compute_delta_pair_exchange(o1: Node, o2: Node, path: MultiODPath):
                 + path.get_distance_by_node_ids(o_f_next, o_s.node_id)
                 + path.get_distance_by_node_ids(o_s_prev, o_f.node_id)
                 + path.get_distance_by_node_ids(o_f.node_id, d_s.node_id)
+                + path.get_distance_by_node_ids(d_f_next, d_s.node_id)
                 + path.get_distance_by_node_ids(d_s_prev, d_f.node_id)
                 + path.get_distance_by_node_ids(d_s_next, d_f.node_id)
             ) 
@@ -744,6 +746,7 @@ def _compute_delta_pair_exchange(o1: Node, o2: Node, path: MultiODPath):
         elif od_f_is_neighbor and not do_fs_is_neighbor and not od_s_is_neighbor:
             before = (
                 path.get_distance_by_node_ids(o_f_prev, o_f.node_id)
+                + path.get_distance_by_node_ids(o_f.node_id, d_f.node_id)
                 + path.get_distance_by_node_ids(d_f_next, d_f.node_id)
                 + path.get_distance_by_node_ids(o_s_prev, o_s.node_id)
                 + path.get_distance_by_node_ids(o_s_next, o_s.node_id)
@@ -752,6 +755,7 @@ def _compute_delta_pair_exchange(o1: Node, o2: Node, path: MultiODPath):
             )
             after = (
                 path.get_distance_by_node_ids(o_f_prev, o_s.node_id)
+                + path.get_distance_by_node_ids(o_s.node_id, d_s.node_id)
                 + path.get_distance_by_node_ids(d_f_next, d_s.node_id)
                 + path.get_distance_by_node_ids(o_s_prev, o_f.node_id)
                 + path.get_distance_by_node_ids(o_s_next, o_f.node_id)
@@ -785,6 +789,7 @@ def _compute_delta_pair_exchange(o1: Node, o2: Node, path: MultiODPath):
                 + path.get_distance_by_node_ids(o_f_next, o_f.node_id)
                 + path.get_distance_by_node_ids(d_f_prev, d_f.node_id)
                 + path.get_distance_by_node_ids(o_s.node_id, d_f.node_id)
+                + path.get_distance_by_node_ids(o_s_next, o_s.node_id)
                 + path.get_distance_by_node_ids(d_s_prev, d_s.node_id)
                 + path.get_distance_by_node_ids(d_s_next, d_s.node_id)
             ) 
@@ -793,6 +798,7 @@ def _compute_delta_pair_exchange(o1: Node, o2: Node, path: MultiODPath):
                 + path.get_distance_by_node_ids(o_f_next, o_s.node_id)
                 + path.get_distance_by_node_ids(d_f_prev, d_s.node_id)
                 + path.get_distance_by_node_ids(o_f.node_id, d_s.node_id)
+                + path.get_distance_by_node_ids(o_s_next, o_f.node_id)
                 + path.get_distance_by_node_ids(d_s_prev, d_f.node_id)
                 + path.get_distance_by_node_ids(d_s_next, d_f.node_id)
             ) 
