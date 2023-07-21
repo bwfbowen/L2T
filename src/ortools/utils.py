@@ -50,12 +50,14 @@ def display_ortools_result(X, solver, problem,
         raise NotImplementedError
     return fig
 
-def display_pd_ortools_result(problem,solv):
-    """Prints solution on console."""
+def display_pd_ortools_result(problem, solv):
+    """Returns solution as a formatted string."""
     manager = solv[1]
     routing = solv[2]
     solution = solv[3]
-    print(f'Objective: {solution.ObjectiveValue()}')
+    result_string = ''
+
+    result_string += f'Objective: {solution.ObjectiveValue()}\n'
     total_distance = 0
     for vehicle_id in range(problem.num_taxi):
         path = []
@@ -63,13 +65,16 @@ def display_pd_ortools_result(problem,solv):
         plan_output = 'Route for vehicle {}:\n'.format(vehicle_id)
         route_distance = 0
         while not routing.IsEnd(index):
-            plan_output += ' {} -> '.format(manager.IndexToNode(index)+1)
+            plan_output += ' {} -> '.format(manager.IndexToNode(index) + 1)
             previous_index = index
             index = solution.Value(routing.NextVar(index))
-            route_distance += routing.GetArcCostForVehicle(
-                previous_index, index, vehicle_id)
-        plan_output += '{}\n'.format(manager.IndexToNode(index)+1)
+            route_distance += routing.GetArcCostForVehicle(previous_index, index, vehicle_id)
+        plan_output += '{}\n'.format(manager.IndexToNode(index) + 1)
         plan_output += 'Distance of the route: {}m'.format(route_distance)
-        print(plan_output)
+        result_string += plan_output + '\n'
         total_distance += route_distance
-    print('Total Distance of all routes: {}m'.format(total_distance))
+    result_string += 'Total Distance of all routes: {}m'.format(total_distance)
+
+    return result_string, total_distance
+
+
