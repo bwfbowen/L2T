@@ -1,3 +1,4 @@
+import time
 import numpy as np
 import gymnasium as gym 
 
@@ -47,6 +48,7 @@ class MultiODEnv(gym.Env):
                  locations: dict = None, 
                  seed: int = 0, 
                  max_length: int = int(4e4),
+                 max_time_length: int = int(1e3),
                  k_recent: int = 1
                  ):
         super().__init__()
@@ -63,6 +65,7 @@ class MultiODEnv(gym.Env):
                                        shape=(self.problem.num_O * 2, 12),
                                        dtype=np.float32)})
         self._max_length = max_length
+        self._max_time_length = max_time_length
         self._k_recent = k_recent
     
     def step(self, action: int):
@@ -80,6 +83,7 @@ class MultiODEnv(gym.Env):
         return next_obs, reward, done, done, infos
         
     def reset(self, seed=None, options=None):
+        self.start_time = time.time()
         self._step = 0
         self.solution = self.problem.generate_feasible_solution()
         self._reset_history_buffer()
@@ -106,7 +110,7 @@ class MultiODEnv(gym.Env):
         return -all_delta
     
     def _calc_done(self, step):
-        return step >= self._max_length
+        return step >= self._max_length or time.time() - self.start_time >= self._max_time_length
     
     def _regenerate_feasible_solution(self, *args):
         old_cost = self.problem.calc_cost(self.solution)
@@ -172,3 +176,23 @@ class MultiODEnv(gym.Env):
     @action_dict.setter
     def set_action_dict(self, value):
         self._action_dict = value 
+
+
+class SparseMultiODEnv(MultiODEnv):
+    def step(self, action: int):
+        
+        self._step += 1
+        self.solution, all_delta = self.action_dict[action](self)
+        next_obs = {}
+        next_obs['solution'] = self.generate_state(self.solution)
+        done = self._calc_done(self._step)
+        reward = self._calc_reward(done)
+        self._update_history_buffer(action, all_delta)
+        infos = self._calc_infos(all_delta, self._history_action_buffer, self._history_delta_sign)
+        if infos['cost'] < self.best_cost:
+            self._update_best_solution(self.solution, infos, self._step)
+        next_obs['problem'] = np.array([infos['delta'], infos['delta_best'], *infos['k_recent_action'], *infos['k_recent_delta_sign']], dtype=np.float32)
+        return next_obs, reward, done, done, infos
+
+    def _calc_reward(self, done):
+        return self.best_cost if done else 0.
