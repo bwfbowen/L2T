@@ -69,7 +69,7 @@ class MultiODEnv(gym.Env):
         self._k_recent = k_recent
     
     def step(self, action: int):
-        
+        # print(action)
         self._step += 1
         self.solution, all_delta = self.action_dict[action](self)
         next_obs = {}
