@@ -45,6 +45,7 @@ class SaveBestSolCallback(BaseCallback):
             self.logger.record('best/best_cost', best_cost)
             self.logger.record('best/best_sol_at_step', best_sol_at_step)
             self.logger.record('best/best_sol_found_time', found_time - self.start_time)
+            self.model.save(os.path.join(self.log_dir, f'{self.instance_name}.{int(self.cur_best_cost)}.model'))
             if self.verbose >= 1:
                 print(f'Best solution cost: {best_cost}, found at {best_sol_at_step} step, {found_time - self.start_time:.2f} seconds used')
         if self.rollout_best_cost > best_cost:
