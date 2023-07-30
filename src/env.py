@@ -1,3 +1,5 @@
+from abc import abstractmethod
+
 import time
 import numpy as np
 import gymnasium as gym 
@@ -26,14 +28,14 @@ def get_default_action_dict(env_instance):
                'actions.PathAction({idx}, operator=operators.DBackwardOperator(length=4))',
                'actions.PathAction({idx}, operator=operators.ODPairsExchangeOperator())',
                'actions.PathRandomAction({idx}, operator=operators.RandomODPairsExchangeOperator(change_percentage=0.1))',
-               'actions.PathRandomAction({idx}, operator=operators.RandomODPairsExchangeOperator(change_percentage=0.3))',
-               'actions.PathRandomAction({idx}, operator=operators.RandomODPairsExchangeOperator(change_percentage=0.5))',
+            #    'actions.PathRandomAction({idx}, operator=operators.RandomODPairsExchangeOperator(change_percentage=0.3))',
+            #    'actions.PathRandomAction({idx}, operator=operators.RandomODPairsExchangeOperator(change_percentage=0.5))',
                'actions.PathRandomAction({idx}, operator=operators.RandomOForwardOperator(change_percentage=0.1))',
-               'actions.PathRandomAction({idx}, operator=operators.RandomOForwardOperator(change_percentage=0.3))',
-               'actions.PathRandomAction({idx}, operator=operators.RandomOForwardOperator(change_percentage=0.5))',
+            #    'actions.PathRandomAction({idx}, operator=operators.RandomOForwardOperator(change_percentage=0.3))',
+            #    'actions.PathRandomAction({idx}, operator=operators.RandomOForwardOperator(change_percentage=0.5))',
                'actions.PathRandomAction({idx}, operator=operators.RandomDBackwardOperator(change_percentage=0.1))',
-               'actions.PathRandomAction({idx}, operator=operators.RandomDBackwardOperator(change_percentage=0.3))',
-               'actions.PathRandomAction({idx}, operator=operators.RandomDBackwardOperator(change_percentage=0.5))'
+            #    'actions.PathRandomAction({idx}, operator=operators.RandomDBackwardOperator(change_percentage=0.3))',
+            #    'actions.PathRandomAction({idx}, operator=operators.RandomDBackwardOperator(change_percentage=0.5))'
                ]
     _action_dict = {idx: eval(_action.format(idx=idx)) for idx, _action in enumerate(_actions, start=1)}
     _action_dict[0] = env_instance._regenerate_feasible_solution
@@ -179,20 +181,68 @@ class MultiODEnv(gym.Env):
 
 
 class SparseMultiODEnv(MultiODEnv):
+    def __init__(self, 
+                 target_cost: int,
+                 problem: MultiODProblem = None, 
+                 action_dict: dict = None,
+                 *, 
+                 num_O: int = 10, 
+                 num_taxi: int = 1, 
+                 locations: dict = None, 
+                 seed: int = 0, 
+                 max_length: int = int(4e4),
+                 max_time_length: int = int(1e3),
+                 k_recent: int = 1
+                 ):
+        super().__init__(problem=problem, action_dict=action_dict, num_O=num_O, num_taxi=num_taxi, locations=locations, seed=seed, max_length=max_length, max_time_length=max_time_length, k_recent=k_recent)
+        self.target_cost = target_cost
+        self.observation_space = gym.spaces.Dict({
+            'observation': gym.spaces.Box(low=0., high=0.),
+            'achieved_goal': gym.spaces.Box(low=0., high=np.inf),
+            'desired_goal': gym.spaces.Box(low=0., high=np.inf),
+            'problem': gym.spaces.Box(low=np.array([-np.inf, -np.inf] + [0] * k_recent + [-1] * k_recent), 
+                                          high=np.array([np.inf, np.inf] + [len(self._action_dict) - 1] * k_recent + [1] * k_recent),
+                                          shape=(2 + k_recent * 2,), 
+                                          dtype=np.float32),
+            'solution': gym.spaces.Box(low=np.ones((self.problem.num_O * 2, 12)) * np.array([0] * 6 + [0] * 3 + [0] * 3), 
+                                       high=np.ones((self.problem.num_O * 2, 12)) * np.array([1e3] * 6 + [1e4] * 3 + [1] * 3), 
+                                       shape=(self.problem.num_O * 2, 12),
+                                       dtype=np.float32)
+            })
+
+    def reset(self, seed=None, options=None):
+        self.start_time = time.time()
+        self._step = 0
+        self.solution = self.problem.generate_feasible_solution()
+        self._reset_history_buffer()
+        self._reset_best_solution(self.solution)
+        obs = {'observation': 0., 'achieved_goal': 0., 'desired_goal': self.target_cost}
+        obs['solution'], infos = self.generate_state(self.solution), self._calc_infos(k_recent_action=self._history_action_buffer, k_recent_delta_sign=self._history_delta_sign)
+        obs['problem'] = np.array([infos['delta'], infos['delta_best'], *infos['k_recent_action'], *infos['k_recent_delta_sign']])
+        obs['achieved_goal'] = int(infos['cost'])
+        return obs, infos
+    
     def step(self, action: int):
         
         self._step += 1
         self.solution, all_delta = self.action_dict[action](self)
-        next_obs = {}
+        next_obs = {'observation': 0., 'achieved_goal': 0., 'desired_goal': self.target_cost}
         next_obs['solution'] = self.generate_state(self.solution)
         done = self._calc_done(self._step)
-        reward = self._calc_reward(done)
         self._update_history_buffer(action, all_delta)
         infos = self._calc_infos(all_delta, self._history_action_buffer, self._history_delta_sign)
         if infos['cost'] < self.best_cost:
             self._update_best_solution(self.solution, infos, self._step)
         next_obs['problem'] = np.array([infos['delta'], infos['delta_best'], *infos['k_recent_action'], *infos['k_recent_delta_sign']], dtype=np.float32)
+        next_obs['achieved_goal'] = int(infos['cost'])
+        reward = self._calc_reward(achieved_goal=next_obs['achieved_goal'], desired_goal=next_obs['desired_goal'], info=infos)
         return next_obs, reward, done, done, infos
 
-    def _calc_reward(self, done):
-        return self.best_cost if done else 0.
+    def _calc_reward(self, achieved_goal, desired_goal, info):
+        reward = (np.asarray(achieved_goal) <= np.asarray(desired_goal)).astype(int)
+        return reward
+    
+    @abstractmethod
+    def compute_reward(self, achieved_goal, desired_goal, info):
+        reward = self._calc_reward(achieved_goal=achieved_goal, desired_goal=desired_goal, info=info)
+        return reward 
