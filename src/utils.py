@@ -105,3 +105,26 @@ def read_instance_data(instance_path):
         f.close()
     locations['O'], locations['D'] = np.asarray(locations['O'], dtype=float), np.asarray(locations['D'], dtype=float)
     return locations 
+
+
+def get_lkh3_tour(tour_path):
+    with open(tour_path) as f:
+        while line := f.readline():
+            if line.rstrip() == 'TOUR_SECTION':
+                tour_before_mapping = []
+                while (node := f.readline().rstrip()) != '-1':
+                    tour_before_mapping.append(int(node))
+    _node_reorder = [1, 2] + [i for i in range(1, len(tour_before_mapping) + 1) if i > 2 and i % 2 != 0] + [i for i in range(1, len(tour_before_mapping) + 1) if i > 2 and i % 2 == 0]
+    node_index_mapping = {old_index: new_index for new_index, old_index in enumerate(_node_reorder)}
+    tour_before_reverse = [node_index_mapping[old_index] for old_index in tour_before_mapping]
+    subtour_to_reverse = tour_before_reverse[2:]
+    tour = tour_before_reverse[:2] + subtour_to_reverse[::-1] + [0]
+    return tour
+
+def get_ortools_tour(tour_path, skip_first_lines: int = 3, num_taxi: int = 1):
+    with open(tour_path) as f:
+        for _ in range(skip_first_lines):
+            next(f)
+        tour_before_adding_dummy = list(map(int, f.readline().rstrip().split(' -> ')))
+        tour = [0] + tour_before_adding_dummy[:-1] + [0]
+    return tour
