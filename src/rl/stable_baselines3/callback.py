@@ -40,6 +40,7 @@ class SaveBestSolCallback(BaseCallback):
             plt.close()
             if self.target_cost is None:
                 self.target_cost = int(_problem.calc_cost(self.target_tour))
+            self.logger.record('target/target_cost', self.target_cost)
         if self.verbose >= 1 and self.target_cost is not None:
             print(f'Target cost: {self.target_cost}')
 

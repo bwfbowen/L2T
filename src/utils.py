@@ -120,3 +120,12 @@ def get_lkh3_tour(tour_path):
     subtour_to_reverse = tour_before_reverse[2:]
     tour = tour_before_reverse[:2] + subtour_to_reverse[::-1] + [0]
     return tour 
+
+
+def get_ortools_tour(tour_path, skip_first_lines: int = 3, num_taxi: int = 1):
+    with open(tour_path) as f:
+        for _ in range(skip_first_lines):
+            next(f)
+        tour_before_adding_dummy = list(map(int, f.readline().rstrip().split(' -> ')))
+        tour = [0] + tour_before_adding_dummy[:-1] + [0]
+    return tour 
