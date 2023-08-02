@@ -43,7 +43,7 @@ def get_default_action_dict(env_instance):
 
 
 class MultiODEnv(gym.Env):
-    def __init__(self, problem: MultiODProblem = None, action_dict: dict = None,
+    def __init__(self, problem: MultiODProblem = None, action_dict: callable = None,
                  *, 
                  num_O: int = 10, 
                  num_taxi: int = 1, 
@@ -55,7 +55,7 @@ class MultiODEnv(gym.Env):
                  ):
         super().__init__()
         self.problem = problem if problem is not None else MultiODProblem(num_O=num_O, num_taxi=num_taxi, locations=locations, seed=seed)
-        self._action_dict = action_dict if action_dict is not None else get_default_action_dict(self)
+        self._action_dict = action_dict(self) if action_dict is not None else get_default_action_dict(self)
         self.action_space = gym.spaces.Discrete(len(self._action_dict))
         self.observation_space = gym.spaces.Dict(
             {'problem': gym.spaces.Box(low=np.array([-np.inf, -np.inf] + [0] * k_recent + [-1] * k_recent), 
