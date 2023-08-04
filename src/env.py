@@ -41,6 +41,16 @@ def get_default_action_dict(env_instance):
             #    'actions.PathRandomAction({idx}, operator=operators.RandomDBackwardOperator(change_percentage=0.5))'
                ]
     _action_dict = {idx: eval(_action.format(idx=idx)) for idx, _action in enumerate(_actions, start=1)}
+    _action_dict[0] = env_instance._regenerate_feasible_solution_with_random_actions
+    return _action_dict
+
+
+def get_naive_action_dict(env_instance):
+    _actions = [ 
+               'actions.PathAction({idx}, operator=operators.ExchangeOperator())',
+               'actions.PathAction({idx}, operator=operators.InsertOperator())',
+               ]
+    _action_dict = {idx: eval(_action.format(idx=idx)) for idx, _action in enumerate(_actions, start=1)}
     _action_dict[0] = env_instance._regenerate_feasible_solution
     return _action_dict
 
@@ -141,7 +151,7 @@ class MultiODEnv(gym.Env):
     def _calc_done(self, step):
         return step >= self._max_length or time.time() - self.start_time >= self._max_time_length
     
-    def _regenerate_feasible_solution(self, *args):
+    def _regenerate_feasible_solution_with_random_actions(self, *args):
         old_cost = self.problem.calc_cost(self.solution)
         if not old_cost / self.best_cost < 1 + self._best_cost_tolerance:
             _best_solution = MultiODSolution(self.best_solution, self.problem)
@@ -152,6 +162,13 @@ class MultiODEnv(gym.Env):
         new_cost = self.problem.calc_cost(self.solution)
         delta = new_cost - old_cost
         return self.solution, delta
+    
+    def _regenerate_feasible_solution(self, *args):
+        old_cost = self.problem.calc_cost(self.solution)
+        self.solution = self.problem.generate_feasible_solution()
+        new_cost = self.problem.calc_cost(self.solution)
+        delta = new_cost - old_cost
+        return self.solution, delta 
     
     def _reset_history_buffer(self):
         self._history_action_buffer = SliceableDeque([0 for _ in range(self._k_recent)], maxlen=self._k_recent)
