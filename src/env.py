@@ -5,12 +5,15 @@ import numpy as np
 import gymnasium as gym 
 
 from . import problem
+from . import solution
 from . import actions
 from . import operators
 from . import utils 
 
 
+EPSILON = 1e-5
 MultiODProblem = problem.MultiODProblem
+MultiODSolution = solution.MultiODSolution
 SliceableDeque = utils.SliceableDeque
 
 
@@ -27,19 +30,27 @@ def get_default_action_dict(env_instance):
                'actions.PathAction({idx}, operator=operators.DBackwardOperator(length=3))',
                'actions.PathAction({idx}, operator=operators.DBackwardOperator(length=4))',
                'actions.PathAction({idx}, operator=operators.ODPairsExchangeOperator())',
-               'actions.PathRandomAction({idx}, operator=operators.RandomODPairsExchangeOperator(change_percentage=0.1))',
+            #    'actions.PathRandomAction({idx}, operator=operators.RandomODPairsExchangeOperator(change_percentage=0.1))',
             #    'actions.PathRandomAction({idx}, operator=operators.RandomODPairsExchangeOperator(change_percentage=0.3))',
             #    'actions.PathRandomAction({idx}, operator=operators.RandomODPairsExchangeOperator(change_percentage=0.5))',
-               'actions.PathRandomAction({idx}, operator=operators.RandomOForwardOperator(change_percentage=0.1))',
+            #    'actions.PathRandomAction({idx}, operator=operators.RandomOForwardOperator(change_percentage=0.1))',
             #    'actions.PathRandomAction({idx}, operator=operators.RandomOForwardOperator(change_percentage=0.3))',
             #    'actions.PathRandomAction({idx}, operator=operators.RandomOForwardOperator(change_percentage=0.5))',
-               'actions.PathRandomAction({idx}, operator=operators.RandomDBackwardOperator(change_percentage=0.1))',
+            #    'actions.PathRandomAction({idx}, operator=operators.RandomDBackwardOperator(change_percentage=0.1))',
             #    'actions.PathRandomAction({idx}, operator=operators.RandomDBackwardOperator(change_percentage=0.3))',
             #    'actions.PathRandomAction({idx}, operator=operators.RandomDBackwardOperator(change_percentage=0.5))'
                ]
     _action_dict = {idx: eval(_action.format(idx=idx)) for idx, _action in enumerate(_actions, start=1)}
     _action_dict[0] = env_instance._regenerate_feasible_solution
     return _action_dict
+
+
+def get_default_random_actions():
+       _random_actions = ['actions.PathRandomAction({idx}, operator=operators.RandomODPairsExchangeOperator(change_percentage=0.1))',
+                          'actions.PathRandomAction({idx}, operator=operators.RandomOForwardOperator(change_percentage=0.1))',
+                          'actions.PathRandomAction({idx}, operator=operators.RandomDBackwardOperator(change_percentage=0.1))']
+       _random_actions = [eval(a.format(idx=idx)) for idx, a in enumerate(_random_actions)]
+       return _random_actions
 
 
 class MultiODEnv(gym.Env):
@@ -51,16 +62,19 @@ class MultiODEnv(gym.Env):
                  seed: int = 0, 
                  max_length: int = int(4e4),
                  max_time_length: int = int(1e3),
-                 k_recent: int = 1
+                 k_recent: int = 1,
+                 max_no_improvement: int = 6,
+                 best_cost_tolerance: float = 0.01,
+                 random_actions: list = None 
                  ):
         super().__init__()
         self.problem = problem if problem is not None else MultiODProblem(num_O=num_O, num_taxi=num_taxi, locations=locations, seed=seed)
         self._action_dict = action_dict(self) if action_dict is not None else get_default_action_dict(self)
         self.action_space = gym.spaces.Discrete(len(self._action_dict))
         self.observation_space = gym.spaces.Dict(
-            {'problem': gym.spaces.Box(low=np.array([-np.inf, -np.inf] + [0] * k_recent + [-1] * k_recent), 
-                                       high=np.array([np.inf, np.inf] + [len(self._action_dict) - 1] * k_recent + [1] * k_recent),
-                                       shape=(2 + k_recent * 2,), 
+            {'problem': gym.spaces.Box(low=np.array([-np.inf, -np.inf, 0] + [0] * k_recent + [-1] * k_recent), 
+                                       high=np.array([np.inf, np.inf, 1] + [len(self._action_dict) - 1] * k_recent + [1] * k_recent),
+                                       shape=(3 + k_recent * 2,), 
                                        dtype=np.float32),
             'solution': gym.spaces.Box(low=np.ones((self.problem.num_O * 2, 12)) * np.array([0] * 6 + [0] * 3 + [0] * 3), 
                                        high=np.ones((self.problem.num_O * 2, 12)) * np.array([1e3] * 6 + [1e4] * 3 + [1] * 3), 
@@ -69,11 +83,22 @@ class MultiODEnv(gym.Env):
         self._max_length = max_length
         self._max_time_length = max_time_length
         self._k_recent = k_recent
+        self._max_no_improvement = max_no_improvement
+        self._best_cost_tolerance = best_cost_tolerance
+        self._random_actions = random_actions if random_actions is not None else get_default_random_actions()
     
     def step(self, action: int):
         # print(action)
         self._step += 1
+        if self._no_improvement >= self._max_no_improvement:
+            action = 0
+            self._no_improvement = 0
         self.solution, all_delta = self.action_dict[action](self)
+        # no improvement:
+        if action != 0 and all_delta >= -EPSILON:
+            self._no_improvement += 1
+        else:
+            self._no_improvement = 0
         next_obs = {}
         next_obs['solution'] = self.generate_state(self.solution)
         reward, done = self._calc_reward(all_delta), self._calc_done(self._step)
@@ -81,18 +106,19 @@ class MultiODEnv(gym.Env):
         infos = self._calc_infos(all_delta, self._history_action_buffer, self._history_delta_sign)
         if infos['cost'] < self.best_cost:
             self._update_best_solution(self.solution, infos, self._step)
-        next_obs['problem'] = np.array([infos['delta'], infos['delta_best'], *infos['k_recent_action'], *infos['k_recent_delta_sign']], dtype=np.float32)
+        next_obs['problem'] = self.calc_features_of_problem(infos)
         return next_obs, reward, done, done, infos
         
     def reset(self, seed=None, options=None):
         self.start_time = time.time()
         self._step = 0
+        self._no_improvement = 0
         self.solution = self.problem.generate_feasible_solution()
         self._reset_history_buffer()
         self._reset_best_solution(self.solution)
         obs = {}
         obs['solution'], infos = self.generate_state(self.solution), self._calc_infos(k_recent_action=self._history_action_buffer, k_recent_delta_sign=self._history_delta_sign)
-        obs['problem'] = np.array([infos['delta'], infos['delta_best'], *infos['k_recent_action'], *infos['k_recent_delta_sign']])
+        obs['problem'] = self.calc_features_of_problem(infos)
         return obs, infos
 
     def render(self, mode='human', *, figsize: tuple = (8, 6), dpi: float = 80, fig_name: str = None, to_annotate: bool = True, quiver_width: float = 5e-3):
@@ -104,6 +130,7 @@ class MultiODEnv(gym.Env):
         infos = {}
         infos['delta'] = delta 
         infos['cost'] = self.problem.calc_cost(self.solution)
+        infos['no_improvement'] = self._no_improvement / self._max_no_improvement
         infos['delta_best'] = infos['cost'] - self.best_cost
         infos['k_recent_action'], infos['k_recent_delta_sign'] = k_recent_action, k_recent_delta_sign
         return infos 
@@ -116,7 +143,12 @@ class MultiODEnv(gym.Env):
     
     def _regenerate_feasible_solution(self, *args):
         old_cost = self.problem.calc_cost(self.solution)
-        self.solution = self.problem.generate_feasible_solution()
+        if not old_cost / self.best_cost < 1 + self._best_cost_tolerance:
+            _best_solution = MultiODSolution(self.best_solution, self.problem)
+            self.solution = _best_solution
+        # random disturb
+        for ra in self._random_actions:
+            self.solution, _ = ra(self)
         new_cost = self.problem.calc_cost(self.solution)
         delta = new_cost - old_cost
         return self.solution, delta
@@ -170,6 +202,9 @@ class MultiODEnv(gym.Env):
                 features[node.node_id - 1 - self.problem.num_taxi, 6:9] = f2
                 features[node.node_id - 1 - self.problem.num_taxi, 9:12] = f3 
         return features
+    
+    def calc_features_of_problem(self, infos):
+        return np.array([infos['delta'], infos['delta_best'], infos['no_improvement'], *infos['k_recent_action'], *infos['k_recent_delta_sign']], dtype=np.float32)
 
     @property
     def action_dict(self):

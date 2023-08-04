@@ -1,8 +1,10 @@
+import os 
+import copy 
 import random
 from collections import deque, defaultdict
 from itertools import islice
 
-import jax 
+# import jax 
 import numpy as np
 import matplotlib.pyplot as plt 
 import matplotlib.cm as cm
@@ -18,11 +20,11 @@ class SliceableDeque(deque):
                                                index.stop, index.step))
         return deque.__getitem__(self, index)
 
-jax.tree_util.register_pytree_node(
-  SliceableDeque,
-  flatten_func=lambda sd: (sd, None),
-  unflatten_func=lambda treedef, leaves: SliceableDeque(leaves)
-)    
+# jax.tree_util.register_pytree_node(
+#   SliceableDeque,
+#   flatten_func=lambda sd: (sd, None),
+#   unflatten_func=lambda treedef, leaves: SliceableDeque(leaves)
+# )    
     
 
 def random_split_dict(d, num_splits):
@@ -129,3 +131,92 @@ def get_ortools_tour(tour_path, skip_first_lines: int = 3, num_taxi: int = 1):
         tour_before_adding_dummy = list(map(int, f.readline().rstrip().split(' -> ')))
         tour = [0] + tour_before_adding_dummy[:-1] + [0]
     return tour 
+
+
+def generate_pdtsp_instance(num_O: int, 
+                            instance_save_to_dir: str,
+                            lkh3_instance_save_to_dir: str = None,
+                            *, 
+                            random_seed_range: list = [0, 2**15],
+                            x_range: list = [0, 1000],
+                            y_range: list = [0, 1000],
+                            ):
+    seed = random.randint(*random_seed_range)
+    np.random.seed(seed)
+    dim = num_O * 2 + 2
+    # Uniformly generate (x,y) coordinate
+    x = np.random.uniform(low=x_range[0], high=x_range[1], size=dim).astype(int)
+    y = np.random.uniform(low=y_range[0], high=y_range[1], size=dim).astype(int)
+    # The first two rows ought to be the same (x,y) coordinate
+    x[0] = x[1]
+    y[0] = y[1]
+
+    os.makedirs(instance_save_to_dir, exist_ok=True)
+    instance_name_header = f'random-{num_O:03}-{seed:05}'
+    instance_name = instance_name_header + '.tsp'
+
+    # header
+    instance_lines = [
+        f'NAME: {instance_name_header}',
+        'TYPE: TSP',
+        f'COMMENT: size={num_O} seed={seed}',
+        f'DIMENSION: {dim}',
+        'EDGE_WEIGHT_TYPE: EUC_2D',
+        'NODE_COORD_SECTION'
+    ]
+    # NODE_COORD_SECTION
+    instance_lines += [f'+{i // 2} {x[i]} {y[i]}' if i % 2 == 0 else f'-{i // 2} {x[i]} {y[i]}' for i in range(dim) ]
+    # PRECEDENCE_SECTION
+    instance_lines += ['PRECEDENCE_SECTION']
+    instance_lines += [f'+{i} -{i}' for i in range(num_O + 1)]
+    instance_lines += ['EOF']
+
+    with open(os.path.join(instance_save_to_dir, instance_name), 'w') as f:
+        for line in instance_lines:
+            f.write(line + '\n')
+    print(f'Instance {instance_name} saved to {instance_save_to_dir}')
+
+    if lkh3_instance_save_to_dir is not None:
+        os.makedirs(lkh3_instance_save_to_dir, exist_ok=True)
+        lkh3_instance_name_header = f'random-{num_O:03}-{seed:05}'
+        lkh3_instance_name = lkh3_instance_name_header + '.pdtsp'
+        # lkh3 requires a file that differs from random-uniform
+        pd_matrix = np.zeros((dim, 7))
+        indexes = np.arange(dim) + 1
+        pd_matrix[:, 0] = indexes
+
+        # pickup and delivery
+        pickup = copy.deepcopy(indexes)
+        pickup[:2] = 0
+        pickup_mask = indexes % 2 == 0
+        pickup[pickup_mask] = 0
+        pickup = np.roll(pickup, 1)
+        pd_matrix[:, -1] = pickup
+
+        delivery = copy.deepcopy(indexes)
+        delivery[:2] = 0
+        delivery_mask = indexes % 2 != 0
+        delivery[delivery_mask] = 0
+        delivery = np.roll(delivery, -1)
+        pd_matrix[:, -2] = delivery
+
+        lkh3_instance_lines = [
+            f'NAME: {lkh3_instance_name_header}',
+            'TYPE: PDTSP',
+            f'COMMENT: size={num_O} seed={seed}',
+            f'DIMENSION: {dim}',
+            'EDGE_WEIGHT_TYPE: EUC_2D',
+            'NODE_COORD_SECTION',    
+        ]
+        # NODE_COORD_SECTION
+        lkh3_instance_lines += [f'{i + 1} {x[i]} {y[i]}' for i in range(dim)]
+        # PRECEDENCE_SECTION
+        lkh3_instance_lines += ['PICKUP_AND_DELIVERY_SECTION']
+        lkh3_instance_lines += [' '.join(map(lambda x: str(int(x)), pd_matrix[i, :])) for i in range(dim)]
+        # FIXED_EDGES_SECTION
+        lkh3_instance_lines += ['FIXED_EDGES_SECTION', '1 2', '-1', 'EOF']
+
+        with open(os.path.join(lkh3_instance_save_to_dir, lkh3_instance_name), 'w') as f:
+            for line in lkh3_instance_lines:
+                f.write(line + '\n')
+        print(f'Instance {lkh3_instance_name} saved to {lkh3_instance_save_to_dir}')
