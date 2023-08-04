@@ -5,3 +5,4 @@ data/
 *.tsp
 *.txt
 *.tour
+*.sh

@@ -55,6 +55,27 @@ def get_naive_action_dict(env_instance):
     return _action_dict
 
 
+def get_feasible_mapping_action_dict(env_instance):
+    _actions = [ 
+               'actions.InBlockAction({idx}, operator=operators.TwoOptOperator())',
+               'actions.PathAction({idx}, operator=operators.SegmentTwoOptOperator())',
+               'actions.PathAction({idx}, operator=operators.OForwardOperator(length=1))',
+               'actions.PathAction({idx}, operator=operators.OForwardOperator(length=2))',
+               'actions.PathAction({idx}, operator=operators.OForwardOperator(length=3))',
+               'actions.PathAction({idx}, operator=operators.OForwardOperator(length=4))',
+               'actions.PathAction({idx}, operator=operators.OForwardOperator(length=5))',
+               'actions.PathAction({idx}, operator=operators.DBackwardOperator(length=1))',
+               'actions.PathAction({idx}, operator=operators.DBackwardOperator(length=2))',
+               'actions.PathAction({idx}, operator=operators.DBackwardOperator(length=3))',
+               'actions.PathAction({idx}, operator=operators.DBackwardOperator(length=4))',
+               'actions.PathAction({idx}, operator=operators.DBackwardOperator(length=5))',
+               'actions.PathAction({idx}, operator=operators.ODPairsExchangeOperator())',
+               ]
+    _action_dict = {idx: eval(_action.format(idx=idx)) for idx, _action in enumerate(_actions, start=1)}
+    _action_dict[0] = env_instance._regenerate_feasible_solution_with_random_actions
+    return _action_dict
+
+
 def get_default_random_actions():
        _random_actions = ['actions.PathRandomAction({idx}, operator=operators.RandomODPairsExchangeOperator(change_percentage=0.1))',
                           'actions.PathRandomAction({idx}, operator=operators.RandomOForwardOperator(change_percentage=0.1))',
