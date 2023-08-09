@@ -21,24 +21,26 @@ def get_default_action_dict(env_instance):
     _actions = [ 
                'actions.InBlockAction({idx}, operator=operators.TwoOptOperator())',
                'actions.PathAction({idx}, operator=operators.SegmentTwoOptOperator())',
+               'actions.PathAction({idx}, operator=operators.TwoKOptOperator())',
                'actions.PathAction({idx}, operator=operators.ExchangeOperator())',
                'actions.PathAction({idx}, operator=operators.InsertOperator())',
                'actions.PathAction({idx}, operator=operators.OForwardOperator(length=2))',
                'actions.PathAction({idx}, operator=operators.OForwardOperator(length=3))',
                'actions.PathAction({idx}, operator=operators.OForwardOperator(length=4))',
+               'actions.PathAction({idx}, operator=operators.OForwardOperator(length=5))',
+               'actions.PathAction({idx}, operator=operators.OForwardOperator(length=6))',
+               'actions.PathAction({idx}, operator=operators.OForwardOperator(length=7))',
+               'actions.PathAction({idx}, operator=operators.OForwardOperator(length=8))',
+               'actions.PathAction({idx}, operator=operators.OForwardOperator(length=9))',
                'actions.PathAction({idx}, operator=operators.DBackwardOperator(length=2))',
                'actions.PathAction({idx}, operator=operators.DBackwardOperator(length=3))',
                'actions.PathAction({idx}, operator=operators.DBackwardOperator(length=4))',
+               'actions.PathAction({idx}, operator=operators.DBackwardOperator(length=5))',
+               'actions.PathAction({idx}, operator=operators.DBackwardOperator(length=6))',
+               'actions.PathAction({idx}, operator=operators.DBackwardOperator(length=7))',
+               'actions.PathAction({idx}, operator=operators.DBackwardOperator(length=8))',
+               'actions.PathAction({idx}, operator=operators.DBackwardOperator(length=9))',
                'actions.PathAction({idx}, operator=operators.ODPairsExchangeOperator())',
-            #    'actions.PathRandomAction({idx}, operator=operators.RandomODPairsExchangeOperator(change_percentage=0.1))',
-            #    'actions.PathRandomAction({idx}, operator=operators.RandomODPairsExchangeOperator(change_percentage=0.3))',
-            #    'actions.PathRandomAction({idx}, operator=operators.RandomODPairsExchangeOperator(change_percentage=0.5))',
-            #    'actions.PathRandomAction({idx}, operator=operators.RandomOForwardOperator(change_percentage=0.1))',
-            #    'actions.PathRandomAction({idx}, operator=operators.RandomOForwardOperator(change_percentage=0.3))',
-            #    'actions.PathRandomAction({idx}, operator=operators.RandomOForwardOperator(change_percentage=0.5))',
-            #    'actions.PathRandomAction({idx}, operator=operators.RandomDBackwardOperator(change_percentage=0.1))',
-            #    'actions.PathRandomAction({idx}, operator=operators.RandomDBackwardOperator(change_percentage=0.3))',
-            #    'actions.PathRandomAction({idx}, operator=operators.RandomDBackwardOperator(change_percentage=0.5))'
                ]
     _action_dict = {idx: eval(_action.format(idx=idx)) for idx, _action in enumerate(_actions, start=1)}
     _action_dict[0] = env_instance._regenerate_feasible_solution_with_random_actions
@@ -59,6 +61,7 @@ def get_feasible_mapping_action_dict(env_instance):
     _actions = [ 
                'actions.InBlockAction({idx}, operator=operators.TwoOptOperator())',
                'actions.PathAction({idx}, operator=operators.SegmentTwoOptOperator())',
+               'actions.PathAction({idx}, operator=operators.TwoKOptOperator())',
                'actions.PathAction({idx}, operator=operators.OForwardOperator(length=1))',
                'actions.PathAction({idx}, operator=operators.OForwardOperator(length=2))',
                'actions.PathAction({idx}, operator=operators.OForwardOperator(length=3))',
@@ -78,8 +81,8 @@ def get_feasible_mapping_action_dict(env_instance):
 
 def get_default_random_actions():
        _random_actions = ['actions.PathRandomAction({idx}, operator=operators.RandomODPairsExchangeOperator(change_percentage=0.1))',
-                          'actions.PathRandomAction({idx}, operator=operators.RandomOForwardOperator(change_percentage=0.1))',
-                          'actions.PathRandomAction({idx}, operator=operators.RandomDBackwardOperator(change_percentage=0.1))']
+                          'actions.PathRandomAction({idx}, operator=operators.RandomOForwardOperator(change_percentage=0.2))',
+                          'actions.PathRandomAction({idx}, operator=operators.RandomDBackwardOperator(change_percentage=0.2))']
        _random_actions = [eval(a.format(idx=idx)) for idx, a in enumerate(_random_actions)]
        return _random_actions
 
@@ -265,9 +268,12 @@ class SparseMultiODEnv(MultiODEnv):
                  seed: int = 0, 
                  max_length: int = int(4e4),
                  max_time_length: int = int(1e3),
-                 k_recent: int = 1
+                 k_recent: int = 1,
+                 max_no_improvement: int = 6,
+                 best_cost_tolerance: float = 0.01,
+                 random_actions: list = None 
                  ):
-        super().__init__(problem=problem, action_dict=action_dict, num_O=num_O, num_taxi=num_taxi, locations=locations, seed=seed, max_length=max_length, max_time_length=max_time_length, k_recent=k_recent)
+        super().__init__(problem=problem, action_dict=action_dict, num_O=num_O, num_taxi=num_taxi, locations=locations, seed=seed, max_length=max_length, max_time_length=max_time_length, k_recent=k_recent, max_no_improvement=max_no_improvement, best_cost_tolerance=best_cost_tolerance, random_actions=random_actions)
         self.target_cost = target_cost
         self.observation_space = gym.spaces.Dict({
             'observation': gym.spaces.Box(low=0., high=0.),
@@ -286,6 +292,7 @@ class SparseMultiODEnv(MultiODEnv):
     def reset(self, seed=None, options=None):
         self.start_time = time.time()
         self._step = 0
+        self._no_improvement = 0
         self.solution = self.problem.generate_feasible_solution()
         self._reset_history_buffer()
         self._reset_best_solution(self.solution)
@@ -298,7 +305,15 @@ class SparseMultiODEnv(MultiODEnv):
     def step(self, action: int):
         
         self._step += 1
+        if self._no_improvement >= self._max_no_improvement:
+            action = 0
+            self._no_improvement = 0
         self.solution, all_delta = self.action_dict[action](self)
+        # no improvement:
+        if action != 0 and all_delta >= -EPSILON:
+            self._no_improvement += 1
+        else:
+            self._no_improvement = 0
         next_obs = {'observation': 0., 'achieved_goal': 0., 'desired_goal': self.target_cost}
         next_obs['solution'] = self.generate_state(self.solution)
         done = self._calc_done(self._step)

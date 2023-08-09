@@ -269,6 +269,17 @@ class MultiODSolution(Solution):
             self._reassign_block_attrs_after_insert(path, node)
 
         return path 
+
+    def reverse_within_path(self, seq_id1: int, seq_id2: int, path_id: int = 0, path: MultiODPath = None):
+        if path is None:
+            path = self.paths[path_id]
+        first, second = seq_id1, seq_id2 
+        while first < second:
+            node_id1, node_id2 = path.get_by_seq_id(first).node_id, path.get_by_seq_id(second).node_id
+            self.exchange_nodes_within_path(node_id1, node_id2, path=path) 
+            first = first + 1
+            second = second - 1
+        return path 
     
     def _swap_seq_id_within_path(self, path: MultiODPath, node1: Node, node2: Node):
         node1.seq_id, node2.seq_id = node2.seq_id, node1.seq_id
