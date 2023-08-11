@@ -5,6 +5,20 @@ from stable_baselines3.common.torch_layers import BaseFeaturesExtractor
 
 
 class PSExtractor(BaseFeaturesExtractor):
+    """Feature extractor for Multi-OD problem.
+
+    Leverages multi head self attention to extract features for raw solution features and 
+    concats with raw problem features.
+    
+    Parameters
+    ------
+    observation_space: gym.spaces.Dict, the Multi-OD Env observation space
+    features_dim: int, dummy features dim
+    sol_input_dim: int, the dimension of raw solution feature
+    hidden_dim: int
+    num_heads: int, number of heads in multi head attention.
+    
+    """
     def __init__(self, observation_space: gym.spaces.Dict, 
                  features_dim: int = 16, 
                  sol_input_dim: int = 12,

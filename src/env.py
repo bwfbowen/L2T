@@ -88,6 +88,16 @@ def get_default_random_actions():
 
 
 class MultiODEnv(gym.Env):
+    """RL Environment for Multi-OD problems.
+    
+    The main class for RL agents to interact with Multi-OD problems.
+
+    Parameters
+    ------
+    problem: problem.MultiODProblem, an instance of `problem.MultiODProblem`
+    action_dict: callable, specified actions to use
+    
+    """
     def __init__(self, problem: MultiODProblem = None, action_dict: callable = None,
                  *, 
                  num_O: int = 10, 

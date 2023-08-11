@@ -14,6 +14,24 @@ MultiODSolution = solution.MultiODSolution
 
 
 class SaveBestSolCallback(BaseCallback):
+    """Callback class that records solutions and corresponding statistics.
+    
+    Records best solutions during training, and the time and steps spent for finding them 
+    with tensorboard utilities.
+
+    Parameters
+    ------
+    log_dir: str, saving path of the tensorboard results.
+    instance_name: str, the name of the result directory, also the name displayed in tensorboard.
+    verbose: int, whether to display the content. `verbose > 0` to display the content.
+    target_cost: float, the `target_cost` is the target of the training, by giving this parameter, 
+        `target_gap` will be calculated. If param `target_tour` is given and `target_cost` is not,
+        `target_cost` will be calculated from `target_tour`.
+    target_tour: MultiODSolution, list[list[int]]. The tour provided as the target. The fig display of 
+        the target tour will be recorded.
+    early_stop: bool, if a solution reaches the same cost as target cost, then the training will stop.
+
+    """
     def __init__(self, log_dir: str, instance_name: str, verbose: int = 0, target_cost: float = None, target_tour: MultiODSolution = None, early_stop: bool = True):
         super().__init__(verbose=verbose)
         self.cur_best_cost = np.inf 
@@ -54,6 +72,11 @@ class SaveBestSolCallback(BaseCallback):
             best_sol = self.training_env.get_attr('best_solution')[best_cost_index]
             self.cur_best_sol = best_sol 
             best_sol_at_step = self.training_env.get_attr('best_sol_at_step')[best_cost_index]
+            _problem = self.training_env.get_attr('problem')[best_cost_index]
+            best_sol = MultiODSolution(best_sol, _problem)
+            sol_figure = display_result(_problem, best_sol)
+            self.logger.record('best/best_sol', Figure(sol_figure, close=True), exclude=('stdout', 'log', 'json', 'csv'))
+            plt.close()
             self.logger.record('best/best_cost', best_cost)
             self.logger.record('best/best_sol_at_step', best_sol_at_step)
             self.logger.record('best/best_sol_found_time', found_time - self.start_time)
@@ -92,11 +115,7 @@ class SaveBestSolCallback(BaseCallback):
         self.logger.record('rollout/rollout_best_sol_found_time', self.rollout_found_time - self.rollout_start_time)
         convergence_gap = abs(self.rollout_best_cost - self.prev_rollout_best_cost)
         self.logger.record('rollout/convergence_gap', convergence_gap)
-        _problem = self.training_env.get_attr('problem')[self._rollout_best_index]
-        rollout_best_sol = MultiODSolution(self._rollout_best_sol, _problem)
-        sol_figure = display_result(_problem, rollout_best_sol)
-        self.logger.record('rollout/rollout_best_sol', Figure(sol_figure, close=True), exclude=('stdout', 'log', 'json', 'csv'))
-        plt.close()
+
         if self.rollout_best_cost <= self.cur_best_cost:
             self.model.save(os.path.join(self.log_dir, f'{self.instance_name}.{int(self.cur_best_cost)}.model'))
         if self.target_cost is not None:

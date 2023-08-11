@@ -426,7 +426,8 @@ class RandomOForwardOperator(Operator):
         delta = 0.
         for node_id in selected:
             node = path.get_by_node_id(node_id)
-            target_seq_id = random.randint(2, node.seq_id)
+            d = path.get_by_node_id(path.OD_mapping[node.node_id])
+            target_seq_id = random.randint(2, d.seq_id - 1)
             inner_delta = self.compute_delta(node, target_seq_id, path)
             delta += inner_delta
             improved_path = solution.insert_within_path(node_id, target_seq_id, path=path) # Path modified in-place
@@ -471,7 +472,8 @@ class RandomDBackwardOperator(Operator):
         delta = 0.
         for node_id in selected:
             node = path.get_by_node_id(node_id)
-            target_seq_id = random.randint(node.seq_id, n - 1)
+            o = path.get_by_node_id(path.DO_mapping[node.node_id])
+            target_seq_id = random.randint(o.seq_id + 1, n - 1)
             inner_delta = self.compute_delta(node, target_seq_id, path)
             delta += inner_delta
             improved_path = solution.insert_within_path(node_id, target_seq_id, path=path) # Path modified in-place
