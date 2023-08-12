@@ -555,6 +555,198 @@ class RandomODPairsExchangeOperator(Operator):
             improved_path = solution.exchange_nodes_within_path(node1_id, node2_id, path_id, path) # Path modified in-place
             improved_path = solution.exchange_nodes_within_path(path.OD_mapping[node1_id], path.OD_mapping[node2_id], path_id, improved_path)
         return improved_path, delta, True
+    
+
+class SameBlockExchangeOperator(Operator):
+    def __init__(self):
+        super().__init__(operator_type='in-block')
+    
+    def __call__(self, solution: MultiODSolution, block_id: int, path_id: int = 0, min_delta=-EPSILON):
+        path: MultiODPath = solution.paths[path_id]
+        block = path.get_by_block_id(block_id)
+        n = len(block)
+        label = None
+        head, tail = block[0], block[-1]
+        pb = head.prev_node.node_id if head.prev_node is not None else 0
+        nb = tail.next_node.node_id if tail.next_node is not None else 0
+        for first in range(1, n):
+            node1 = block[first]
+            prev1 = node1.prev_node.node_id
+            before = (
+                path.get_distance_by_node_ids(pb, head.node_id)
+                + path.get_distance_by_node_ids(node1.node_id, prev1)
+                + path.get_distance_by_node_ids(tail.node_id, nb)
+                )
+            after = (
+                path.get_distance_by_node_ids(pb, node1.node_id)
+                + path.get_distance_by_node_ids(head.node_id, tail.node_id)
+                + path.get_distance_by_node_ids(nb, prev1)
+            )
+            delta = after - before
+            if delta < min_delta:
+                min_delta = delta
+                label = [first]
+        if label is None:
+            return None, None, None
+        else:
+            improved_path = path
+            first = label[0]
+            improved_path = solution.exhange_sequence_within_block(first, block_id, path=improved_path)
+            return improved_path, min_delta, label
+
+
+class MixedBlockExchangeOperator(Operator):
+    def __init__(self):
+        super().__init__(operator_type='path')
+    
+    def __call__(self, solution: MultiODSolution, path_id: int = 0, min_delta=-EPSILON):
+        path: MultiODPath = solution.paths[path_id]
+        label = None
+        
+        for O_id in path.O_blocks:
+            for D_id in path.D_blocks:
+                O, D = path.block_dict[O_id], path.block_dict[D_id]
+                if not O[0].seq_id > D[0].seq_id: continue
+                dp, dn = D[0].prev_node.node_id, D[-1].next_node.node_id
+                op, on = O[0].prev_node.node_id, O[-1].next_node.node_id
+                if dn == O[0].node_id:
+                    before = (
+                        path.get_distance_by_node_ids(dp, D[0].node_id)
+                        + path.get_distance_by_node_ids(D[-1].node_id, O[0].node_id)
+                        + path.get_distance_by_node_ids(O[-1].node_id, on)
+                    )
+                    after = (
+                        path.get_distance_by_node_ids(dp, O[0].node_id)
+                        + path.get_distance_by_node_ids(O[-1].node_id, D[0].node_id)
+                        + path.get_distance_by_node_ids(D[-1].node_id, on)
+                    )
+                else:
+                    before = (
+                        path.get_distance_by_node_ids(dp, D[0].node_id)
+                        + path.get_distance_by_node_ids(dn, D[-1].node_id)
+                        + path.get_distance_by_node_ids(op, O[0].node_id)
+                        + path.get_distance_by_node_ids(O[-1].node_id, on)
+                    )
+                    after = (
+                        path.get_distance_by_node_ids(dp, O[0].node_id)
+                        + path.get_distance_by_node_ids(dn, O[-1].node_id)
+                        + path.get_distance_by_node_ids(op, D[0].node_id)
+                        + path.get_distance_by_node_ids(D[-1].node_id, on)
+                    )
+                inner_min_delta = after - before 
+                if inner_min_delta < min_delta:
+                    min_delta = inner_min_delta
+                    label = [O_id, D_id]
+        if label is None:
+            return None, None, None
+        else:
+            block_id1, block_id2 = label
+            improved_path = solution.exchange_blocks_within_path(block_id1, block_id2, path=path)
+            return improved_path, min_delta, label
+        
+
+class RandomSameBlockExchangeOperator(Operator):
+    def __init__(self, change_percentage: Union[int, float] = 0.1):
+        super().__init__(operator_type='path-random')
+        self.change = change_percentage
+    
+    def __call__(self, solution: MultiODSolution, path_id: int = 0, min_delta=-EPSILON):
+        path: MultiODPath = solution.paths[path_id]
+        O_list = copy.deepcopy(path.O_blocks)
+        np.random.shuffle(O_list)
+        if type(self.change) == float:
+            num_Os = max(int(len(O_list)*self.change), 1)
+        elif type(self.change) == int:
+            num_Os = max(self.change, 1)
+        selected = O_list[:num_Os]
+
+        improved_path = path
+        delta = 0.
+        for block_id in selected:
+            block = path.block_dict[block_id]
+            head, tail = block[0], block[-1]
+            pb = head.prev_node.node_id if head.prev_node is not None else 0
+            nb = tail.next_node.node_id if tail.next_node is not None else 0
+            break_in_block_seq_id = random.randint(0, len(block) - 1)
+            node1 = block[break_in_block_seq_id]
+            prev1 = node1.prev_node.node_id
+            before = (
+                path.get_distance_by_node_ids(pb, head.node_id)
+                + path.get_distance_by_node_ids(node1.node_id, prev1)
+                + path.get_distance_by_node_ids(tail.node_id, nb)
+                )
+            after = (
+                path.get_distance_by_node_ids(pb, node1.node_id)
+                + path.get_distance_by_node_ids(head.node_id, tail.node_id)
+                + path.get_distance_by_node_ids(nb, prev1)
+            )
+            inner_delta = after - before
+            delta += inner_delta
+            improved_path = solution.exhange_sequence_within_block(break_in_block_seq_id, block_id, path=improved_path)
+        
+        return improved_path, delta, True
+    
+
+class RandomMixedBlockExchangeOperator(Operator):
+    def __init__(self, change_percentage: Union[int, float] = 0.1):
+        super().__init__(operator_type='path-random')
+        self.change = change_percentage
+    
+    def __call__(self, solution: MultiODSolution, path_id: int = 0, min_delta=-EPSILON):
+        path: MultiODPath = solution.paths[path_id]
+        O_list = copy.deepcopy(path.O_blocks)
+        np.random.shuffle(O_list)
+        if type(self.change) == float:
+            num_Os = max(int(len(O_list)*self.change), 1)
+        elif type(self.change) == int:
+            num_Os = max(self.change, 1)
+        selected = O_list[:num_Os]
+        
+        improved_path = path
+        delta = 0.
+        for block_id in selected:
+            # in-loop modify the path, therefore the block_id could be removed from path because of merge.
+            if block_id not in path.block_dict: continue 
+            block = path.block_dict[block_id]
+            head, tail = block[0], block[-1]
+            pb = head.prev_node.node_id if head.prev_node is not None else 0
+            nb = tail.next_node.node_id if tail.next_node is not None else 0
+            feasible_Ds = [D_id for D_id in path.D_blocks if path.block_dict[D_id][0].seq_id < block[0].seq_id]
+            if len(feasible_Ds) < 1: continue
+            O = block
+            D_id = random.sample(feasible_Ds, k=1)[0]
+            D = path.block_dict[D_id]
+            dp, dn = D[0].prev_node.node_id, D[-1].next_node.node_id
+            op, on = O[0].prev_node.node_id, O[-1].next_node.node_id
+            if dn == O[0].node_id:
+                before = (
+                    path.get_distance_by_node_ids(dp, D[0].node_id)
+                    + path.get_distance_by_node_ids(D[-1].node_id, O[0].node_id)
+                    + path.get_distance_by_node_ids(O[-1].node_id, on)
+                )
+                after = (
+                    path.get_distance_by_node_ids(dp, O[0].node_id)
+                    + path.get_distance_by_node_ids(O[-1].node_id, D[0].node_id)
+                    + path.get_distance_by_node_ids(D[-1].node_id, on)
+                )
+            else:
+                before = (
+                    path.get_distance_by_node_ids(dp, D[0].node_id)
+                    + path.get_distance_by_node_ids(dn, D[-1].node_id)
+                    + path.get_distance_by_node_ids(op, O[0].node_id)
+                    + path.get_distance_by_node_ids(O[-1].node_id, on)
+                )
+                after = (
+                    path.get_distance_by_node_ids(dp, O[0].node_id)
+                    + path.get_distance_by_node_ids(dn, O[-1].node_id)
+                    + path.get_distance_by_node_ids(op, D[0].node_id)
+                    + path.get_distance_by_node_ids(D[-1].node_id, on)
+                )
+            inner_delta = after - before
+            delta += inner_delta
+            improved_path = solution.exchange_blocks_within_path(block_id, D_id, path=improved_path)
+        
+        return improved_path, delta, True
 
 
 def _compute_delta_pair_exchange(o1: Node, o2: Node, path: MultiODPath):

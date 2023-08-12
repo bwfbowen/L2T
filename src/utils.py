@@ -61,32 +61,47 @@ def generate_random_list_from_dict_with_key_before_value(d, shuffled_keys=None):
 
 def display_result(problem, solution,
                    figsize: tuple = (8, 6), dpi: float = 80, fig_name: str = None, 
-                   to_annotate: bool = True, quiver_width: float = 5e-3):
+                   to_annotate: bool = True, 
+                   quiver_width: float = 5e-3, 
+                   display_back_to_dummy: bool = False,
+                   display_title: bool = True,
+                   annotate_font_size: int = 12,
+                   node_markersize: int = 10,
+                   custom_o_color: str = None,
+                   custom_d_color: str = None,
+                   annotate_dummy: bool = False,
+                   annotate_number: bool = False,
+                   display_axis: bool = False):
     fig = plt.figure(figsize=figsize, dpi=dpi)
+    if not display_axis:
+        plt.axis('off')
     cost = problem.calc_cost(solution)
-    fig_name = f'{problem}--Cost:{cost:.2f}' if fig_name is None else fig_name
-    fig.suptitle(fig_name)
+    if display_title:
+        fig_name = f'{problem}--Cost:{cost:.2f}' if fig_name is None else fig_name
+        fig.suptitle(fig_name)
     colors = cm.rainbow(np.linspace(0, 1, 4))  # 4 different color for dummy, taxi, O and D respectively
     x, y = problem.locations[:, 0], problem.locations[:, 1]
     for path in solution.paths:
         p = [node for node in path]
-        for i in range(len(p) - 2): # not displaying back to dummy arrow
+        end = len(p) - 2 if not display_back_to_dummy else len(p) - 1
+        for i in range(end): # not displaying back to dummy arrow
             di, ai = p[i], p[i + 1]
             # plt.plot([x[di], x[ai]], [y[di], y[ai]], 'k-')
             plt.quiver(x[di], y[di], x[ai] - x[di], y[ai] - y[di], scale_units='xy', angles='xy', scale=1, width=quiver_width)
         
-    plt.plot(x[0], y[0], 'o', color=colors[0], alpha=1)
-    plt.plot(x[1: 1 + problem.num_taxi], y[1: 1 + problem.num_taxi], 'o', color=colors[1], alpha=1)
-    plt.plot(x[problem.O], y[problem.O], 'o', color=colors[2], alpha=1)
-    plt.plot(x[problem.D], y[problem.D], 'o', color=colors[3], alpha=1)
+    plt.plot(x[0], y[0], 'o', color=colors[0], alpha=1, markersize=node_markersize)
+    plt.plot(x[1: 1 + problem.num_taxi], y[1: 1 + problem.num_taxi], 'o', color=colors[1], alpha=1, markersize=node_markersize)
+    plt.plot(x[problem.O], y[problem.O], 'o', markersize=node_markersize, color=colors[2] if custom_o_color is None else custom_o_color, alpha=1)
+    plt.plot(x[problem.D], y[problem.D], 'o', markersize=node_markersize, color=colors[3] if custom_d_color is None else custom_d_color, alpha=1)
     if to_annotate:
-        plt.annotate('dummy', (x[0], y[0]))
+        if annotate_dummy:
+            plt.annotate('dummy', (x[0], y[0]), fontsize=annotate_font_size)
         for i in range(1, 1 + problem.num_taxi):
-            plt.annotate(f'taxi{i}', (x[i], y[i]))
+            plt.annotate(f'taxi{i}' if not annotate_number else f'0', (x[i], y[i]), fontsize=annotate_font_size)
         for idx, i in enumerate(problem.O, start=1):
-            plt.annotate(f'O{idx}', (x[i], y[i]))
+            plt.annotate(f'O{idx}' if not annotate_number else f'{idx}', (x[i], y[i]), fontsize=annotate_font_size)
         for idx, i in enumerate(problem.D, start=1):
-            plt.annotate(f'D{idx}', (x[i], y[i]))
+            plt.annotate(f'D{idx}' if not annotate_number else f'{idx + len(problem.O)}', (x[i], y[i]), fontsize=annotate_font_size)
     return fig
 
 
