@@ -88,7 +88,8 @@ def get_default_random_actions():
                           'actions.PathRandomAction({idx}, operator=operators.RandomOForwardOperator(change_percentage=0.2))',
                           'actions.PathRandomAction({idx}, operator=operators.RandomDBackwardOperator(change_percentage=0.2))',
                           'actions.PathRandomAction({idx}, operator=operators.RandomMixedBlockExchangeOperator(change_percentage=0.1))',
-                          'actions.PathRandomAction({idx}, operator=operators.RandomSameBlockExchangeOperator(change_percentage=0.1))' ]
+                          'actions.PathRandomAction({idx}, operator=operators.RandomSameBlockExchangeOperator(change_percentage=0.1))' 
+                          ]
        _random_actions = [eval(a.format(idx=idx)) for idx, a in enumerate(_random_actions)]
        return _random_actions
 

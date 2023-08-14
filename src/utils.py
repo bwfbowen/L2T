@@ -65,6 +65,7 @@ def display_result(problem, solution,
                    quiver_width: float = 5e-3, 
                    display_back_to_dummy: bool = False,
                    display_title: bool = True,
+                   display_legend: bool = False,
                    annotate_font_size: int = 12,
                    node_markersize: int = 10,
                    custom_o_color: str = None,
@@ -90,9 +91,9 @@ def display_result(problem, solution,
             plt.quiver(x[di], y[di], x[ai] - x[di], y[ai] - y[di], scale_units='xy', angles='xy', scale=1, width=quiver_width)
         
     plt.plot(x[0], y[0], 'o', color=colors[0], alpha=1, markersize=node_markersize)
-    plt.plot(x[1: 1 + problem.num_taxi], y[1: 1 + problem.num_taxi], 'o', color=colors[1], alpha=1, markersize=node_markersize)
-    plt.plot(x[problem.O], y[problem.O], 'o', markersize=node_markersize, color=colors[2] if custom_o_color is None else custom_o_color, alpha=1)
-    plt.plot(x[problem.D], y[problem.D], 'o', markersize=node_markersize, color=colors[3] if custom_d_color is None else custom_d_color, alpha=1)
+    plt.plot(x[1: 1 + problem.num_taxi], y[1: 1 + problem.num_taxi], 'o', color=colors[1], alpha=1, markersize=node_markersize, label='depot')
+    plt.plot(x[problem.O], y[problem.O], 'o', markersize=node_markersize, color=colors[2] if custom_o_color is None else custom_o_color, alpha=1, label='pickup')
+    plt.plot(x[problem.D], y[problem.D], 'o', markersize=node_markersize, color=colors[3] if custom_d_color is None else custom_d_color, alpha=1, label='delivery')
     if to_annotate:
         if annotate_dummy:
             plt.annotate('dummy', (x[0], y[0]), fontsize=annotate_font_size)
@@ -102,6 +103,8 @@ def display_result(problem, solution,
             plt.annotate(f'O{idx}' if not annotate_number else f'{idx}', (x[i], y[i]), fontsize=annotate_font_size)
         for idx, i in enumerate(problem.D, start=1):
             plt.annotate(f'D{idx}' if not annotate_number else f'{idx + len(problem.O)}', (x[i], y[i]), fontsize=annotate_font_size)
+    if display_legend:
+        plt.legend()
     return fig
 
 

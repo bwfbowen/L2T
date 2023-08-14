@@ -40,6 +40,7 @@ class Train(object):
         moving_average = 0
         for epoch in range(n_epoch):
             for step in range(training_steps):
+                
                 if time.time() - start_time >= self.max_time:
                     return 
                 training_set = random.sample(self.train_set, self.batch_size)
@@ -78,7 +79,7 @@ class Train(object):
 #                     torch.nn.utils.clip_grad_norm_(, self.max_grad_norm, norm_type=2)
                     self.optimizer_all.step()
                     self.lr_scheduler_all.step()
-
+                
                 self.train_rewards.append(L.mean().data.cpu())
 
                 if step % 10 == 0:
