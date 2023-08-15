@@ -15,6 +15,9 @@ The default path to data instances is `data/tsppdlib/instances/random-uniform`, 
 │   │   │   │   |   ├──random-002-00232.tsp
 │   │   │   │   |   └──...
 │   └── main.py
+└── U
+│   ├──random-002-00232.2360.tour
+|   └──...
 ```
 
 You could also provide the path to LKH3 results, which will be used for comparison during the training. It can be downloaded from [its website](http://webhotel4.ruc.dk/~keld/research/LKH-3/BENCHMARKS/PDTSP.tgz). The results are located at `TOURS/U`
