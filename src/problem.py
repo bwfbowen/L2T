@@ -119,9 +119,9 @@ class MultiODProblem(Problem):
         distance_matrix = np.linalg.norm(locs[edge_index[0]] - locs[edge_index[1]],
                                               ord=2, axis=1).reshape(len(node_index), len(node_index))
         if ignore_from_dummy_cost:
-            distance_matrix[0, :] = 1
+            distance_matrix[0, :] = 0
         if ignore_to_dummy_cost:
-            distance_matrix[:, 0] = 1
+            distance_matrix[:, 0] = 0
 
         return distance_matrix, O, D, locs, node_index
 

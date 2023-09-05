@@ -59,22 +59,26 @@ def display_pd_ortools_result(problem, solv):
 
     result_string += f'Objective: {solution.ObjectiveValue()}\n'
     total_distance = 0
+    paths = []
     for vehicle_id in range(problem.num_taxi):
-        path = []
         index = routing.Start(vehicle_id)
+        path = []
         plan_output = 'Route for vehicle {}:\n'.format(vehicle_id)
         route_distance = 0
         while not routing.IsEnd(index):
-            plan_output += ' {} -> '.format(manager.IndexToNode(index) + 1)
+            _node = manager.IndexToNode(index) + 1
+            path.append(_node)
+            plan_output += ' {} -> '.format(_node)
             previous_index = index
             index = solution.Value(routing.NextVar(index))
             route_distance += routing.GetArcCostForVehicle(previous_index, index, vehicle_id)
-        plan_output += '{}\n'.format(manager.IndexToNode(index) + 1)
-        plan_output += 'Distance of the route: {}m'.format(route_distance)
+        _node = manager.IndexToNode(index) + 1
+        path.append(_node)
+        path = [0] + path[:-1] + [0]
+        plan_output += '{}\n'.format(_node)
         result_string += plan_output + '\n'
         total_distance += route_distance
-    result_string += 'Total Distance of all routes: {}m'.format(total_distance)
-
-    return result_string, total_distance
+    paths.append(path)
+    return result_string, total_distance, paths
 
 

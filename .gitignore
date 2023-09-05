@@ -1,5 +1,8 @@
 __pycache__/
+data/
 .idea/
 .ipynb_checkpoints/
 *.tsp
 *.txt
+*.tour
+*.sh
