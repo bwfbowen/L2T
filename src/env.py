@@ -13,6 +13,7 @@ from . import utils
 
 EPSILON = 1e-5
 MultiODProblem = problem.MultiODProblem
+PDP = problem.PDP
 MultiODSolution = solution.MultiODSolution
 SliceableDeque = utils.SliceableDeque
 
@@ -92,6 +93,30 @@ def get_default_random_actions():
                           ]
        _random_actions = [eval(a.format(idx=idx)) for idx, a in enumerate(_random_actions)]
        return _random_actions
+
+
+def get_pdp_default_action_dict(env_instance):
+    _actions = [ 
+               'actions.InBlockAction({idx}, operator=operators.TwoOptOperator())',
+               'actions.InBlockAction({idx}, operator=operators.SameBlockExchangeOperator())',
+               'actions.PathAction({idx}, operator=operators.SegmentTwoOptOperator())',
+               'actions.PathAction({idx}, operator=operators.TwoKOptOperator())',
+               'actions.PathAction({idx}, operator=operators.ExchangeOperator())',
+               'actions.PathAction({idx}, operator=operators.InsertOperator())',
+               'actions.PathAction({idx}, operator=operators.OForwardOperator(length=2))',
+               'actions.PathAction({idx}, operator=operators.OForwardOperator(length=3))',
+               'actions.PathAction({idx}, operator=operators.OForwardOperator(length=4))',
+               'actions.PathAction({idx}, operator=operators.DBackwardOperator(length=2))',
+               'actions.PathAction({idx}, operator=operators.DBackwardOperator(length=3))',
+               'actions.PathAction({idx}, operator=operators.DBackwardOperator(length=4))',
+               'actions.PathAction({idx}, operator=operators.ODPairsExchangeOperator())',
+               'actions.PathAction({idx}, operator=operators.MixedBlockExchangeOperator())',
+               'actions.MultiPathsAction({idx}, operator=operators.ODPairsInsertMultiVehicles())',
+               'actions.MultiPathsAction({idx}, operator=operators.ODPairsExchangeMultiVehicles())'
+               ]
+    _action_dict = {idx: eval(_action.format(idx=idx)) for idx, _action in enumerate(_actions, start=1)}
+    _action_dict[0] = env_instance._regenerate_feasible_solution_with_random_actions
+    return _action_dict
 
 
 class MultiODEnv(gym.Env):
@@ -351,3 +376,85 @@ class SparseMultiODEnv(MultiODEnv):
     def compute_reward(self, achieved_goal, desired_goal, info):
         reward = self._calc_reward(achieved_goal=achieved_goal, desired_goal=desired_goal, info=info)
         return reward 
+
+
+class PDPEnv(MultiODEnv):
+    def __init__(
+        self, 
+        problem: MultiODProblem = None, 
+        action_dict: callable = None, 
+        *, 
+        num_O: int = 10, 
+        num_taxi: int = 1, 
+        locations: dict = None, 
+        capacity: int = None,
+        capacities: dict = None,
+        capacity_slack: float = .2,
+        distance_type: str = 'EXACT_2D',
+        ignore_from_dummy_cost: bool = True, 
+        ignore_to_dummy_cost: bool = True,
+        seed: int = 0, 
+        max_length: int = int(40000), 
+        max_time_length: int = int(1000), 
+        k_recent: int = 1, 
+        max_no_improvement: int = 6, 
+        best_cost_tolerance: float = 0.01, 
+        random_actions: list = None
+    ):
+        super().__init__(problem, 
+                         action_dict, 
+                         num_O=num_O, 
+                         num_taxi=num_taxi, 
+                         locations=locations, 
+                         seed=seed, 
+                         max_length=max_length, 
+                         max_time_length=max_time_length, 
+                         k_recent=k_recent, 
+                         max_no_improvement=max_no_improvement, 
+                         best_cost_tolerance=best_cost_tolerance, 
+                         random_actions=random_actions)
+        self.problem = problem if problem is not None else PDP(num_O=num_O, num_taxi=num_taxi, locations=locations, capacity=capacity, capacities=capacities, capacity_slack=capacity_slack, distance_type=distance_type, ignore_from_dummy_cost=ignore_from_dummy_cost, ignore_to_dummy_cost=ignore_to_dummy_cost, seed=seed)
+        self._action_dict = action_dict(self) if action_dict is not None else get_pdp_default_action_dict(self)
+        self.observation_space = gym.spaces.Dict(
+            {'problem': gym.spaces.Box(low=np.array([-np.inf, -np.inf, 0] + [0] * k_recent + [-1] * k_recent), 
+                                       high=np.array([np.inf, np.inf, 1] + [len(self._action_dict) - 1] * k_recent + [1] * k_recent),
+                                       shape=(3 + k_recent * 2,), 
+                                       dtype=np.float32),
+            'solution': gym.spaces.Box(low=np.ones((self.problem.num_O * 2, 15)) * np.array([0] * 6 + [0] * 3 + [0] * 3 + [0] * 3), 
+                                       high=np.ones((self.problem.num_O * 2, 15)) * np.array([1e3] * 6 + [1e4] * 3 + [1] * 3 + [1e2] * 3), 
+                                       shape=(self.problem.num_O * 2, 15),
+                                       dtype=np.float32)})
+        self.distance_rescale_factor = 1 / 1000 if distance_type == 'EXACT_2D' else 1
+    
+    def calc_features_of_solution(self, solution):
+        features = np.zeros((self.problem.num_O * 2, 15), dtype=np.float32)
+        for path_id, path in enumerate(solution):
+            n = len(path) - 1
+            cumcap = np.sum(path.capacities)
+            remain = path.capacity - cumcap 
+            for i in range(1, n):
+                node = path.get_by_seq_id(i)
+                _prev = node.prev_node
+                _prev_id, _prev_OD = _prev.node_id, _prev.OD_type if _prev.OD_type is not None else 2
+                _next = node.next_node if node.next_node is not None else 0
+                if _next != 0:
+                    _next_id, _next_OD = _next.node_id, _next.OD_type 
+                else:
+                    _next_id, _next_OD = 0, 2
+                # prev, node, next location, shape: (2*3,)
+                f1 = path.locations[[_prev_id, node.node_id, _next_id]].flatten()
+                # prev->node, node->next, prev->next distance, shape: (3,)
+                f2 = np.array([path.get_distance_by_node_ids(_prev_id, node.node_id), 
+                            path.get_distance_by_node_ids(node.node_id, _next_id),
+                            path.get_distance_by_node_ids(_prev_id, _next_id)])
+                f2 *= self.distance_rescale_factor
+                # prev, node, next OD type, shape: (3,)
+                f3 = np.array([_prev_OD, node.OD_type, _next_OD])
+                # node capacity, path remaining capacity and path index, shape: (3,)
+                f4 = np.array([self.problem.capacities[node.node_id], remain, path_id])
+                f4 /= self.problem.capacity
+                features[node.node_id - 1, :6] = f1
+                features[node.node_id - 1, 6:9] = f2
+                features[node.node_id - 1, 9:12] = f3 
+                features[node.node_id - 1, 12:15] = f4 
+        return features

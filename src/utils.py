@@ -2,7 +2,7 @@ import os
 import copy 
 import random
 from collections import deque, defaultdict
-from itertools import islice
+from itertools import islice, permutations
 
 # import jax 
 import numpy as np
@@ -34,6 +34,38 @@ def random_split_dict(d, num_splits):
     split_points = [0] + sorted(random.sample(range(1, len(keys)), num_splits-1)) + [None]
     
     return [dict((k, d[k]) for k in keys[split_points[i]:split_points[i+1]]) for i in range(num_splits)]
+
+
+def random_split_dict_with_capacity(d, num_splits, capacities, capacity):
+    """Randomly split the dict into `num_splits` parts, each part will not exceed capacity."""
+    keys = list(d.keys())
+    gen = feasible_splits_generator(d, keys, capacities, num_splits, max_capacity_per_split=capacity)
+    selected_split = next(gen)
+    return [{key: d[key] for key in split.keys()} for split in selected_split]
+
+
+def feasible_splits_generator(d, keys, capacities, num_splits, max_capacity_per_split):
+    while True:  # Infinite loop to keep generating feasible splits.
+        shuffled_keys = random.sample(keys, len(keys))  # Shuffle keys before generating permutations.
+        for perm in permutations(shuffled_keys):
+            splits = [{} for _ in range(num_splits)]
+            capacities_left = [max_capacity_per_split for _ in range(num_splits)]
+            is_feasible = True
+            for key in perm:
+                value = d[key]
+                _item_cap = capacities[key] + capacities[value]
+                allocated = False
+                for i in range(num_splits):
+                    if capacities_left[i] >= _item_cap:
+                        splits[i][key] = True  # Placeholder, replace with actual value from original dict.
+                        capacities_left[i] -= _item_cap
+                        allocated = True
+                        break
+                if not allocated:
+                    is_feasible = False
+                    break
+            if is_feasible:
+                yield splits
 
 
 def generate_random_list_from_dict_with_key_before_value(d, shuffled_keys=None):
@@ -81,24 +113,28 @@ def display_result(problem, solution,
         fig_name = f'{problem}--Cost:{cost:.2f}' if fig_name is None else fig_name
         fig.suptitle(fig_name)
     colors = cm.rainbow(np.linspace(0, 1, 4))  # 4 different color for dummy, taxi, O and D respectively
+    path_colors = cm.rainbow(np.linspace(0, 1, len(solution.paths))) # different colors for paths
+    path_colors[0] = [0, 0, 0, 1] # the first color is set to black
     x, y = problem.locations[:, 0], problem.locations[:, 1]
-    for path in solution.paths:
+    for _path_id, path in enumerate(solution.paths):
         p = [node for node in path]
         end = len(p) - 2 if not display_back_to_dummy else len(p) - 1
         for i in range(end): # not displaying back to dummy arrow
             di, ai = p[i], p[i + 1]
             # plt.plot([x[di], x[ai]], [y[di], y[ai]], 'k-')
-            plt.quiver(x[di], y[di], x[ai] - x[di], y[ai] - y[di], scale_units='xy', angles='xy', scale=1, width=quiver_width)
+            plt.quiver(x[di], y[di], x[ai] - x[di], y[ai] - y[di], scale_units='xy', angles='xy', scale=1, width=quiver_width, color=path_colors[_path_id])
         
     plt.plot(x[0], y[0], 'o', color=colors[0], alpha=1, markersize=node_markersize)
-    plt.plot(x[1: 1 + problem.num_taxi], y[1: 1 + problem.num_taxi], 'o', color=colors[1], alpha=1, markersize=node_markersize, label='depot')
+    if problem.contains_taxi_node:
+        plt.plot(x[1: 1 + problem.num_taxi], y[1: 1 + problem.num_taxi], 'o', color=colors[1], alpha=1, markersize=node_markersize, label='depot')
     plt.plot(x[problem.O], y[problem.O], 'o', markersize=node_markersize, color=colors[2] if custom_o_color is None else custom_o_color, alpha=1, label='pickup')
     plt.plot(x[problem.D], y[problem.D], 'o', markersize=node_markersize, color=colors[3] if custom_d_color is None else custom_d_color, alpha=1, label='delivery')
     if to_annotate:
         if annotate_dummy:
             plt.annotate('dummy', (x[0], y[0]), fontsize=annotate_font_size)
-        for i in range(1, 1 + problem.num_taxi):
-            plt.annotate(f'taxi{i}' if not annotate_number else f'0', (x[i], y[i]), fontsize=annotate_font_size)
+        if problem.contains_taxi_node:
+            for i in range(1, 1 + problem.num_taxi):
+                plt.annotate(f'taxi{i}' if not annotate_number else f'0', (x[i], y[i]), fontsize=annotate_font_size)
         for idx, i in enumerate(problem.O, start=1):
             plt.annotate(f'O{idx}' if not annotate_number else f'{idx}', (x[i], y[i]), fontsize=annotate_font_size)
         for idx, i in enumerate(problem.D, start=1):
@@ -124,7 +160,72 @@ def read_instance_data(instance_path):
                 break 
         f.close()
     locations['O'], locations['D'] = np.asarray(locations['O'], dtype=float), np.asarray(locations['D'], dtype=float)
-    return locations 
+    return locations
+
+
+def read_pdptw_instance_data(instance_path, capacity_slack: float = 0.):
+    locations = defaultdict(deque)
+    capacities = defaultdict(int)
+    def _get_data(line: str):
+        return line[line.index(":") + 1:].strip()
+    
+    with open(instance_path) as f:
+        while line := f.readline():
+            if line.startswith('DIMENSION'):
+                _dim = int(_get_data(line))
+            elif line.startswith('VEHICLES'):
+                num_vehicles = int(_get_data(line))
+            elif line.startswith('CAPACITY'):
+                capacity = int(_get_data(line))
+            elif line.startswith('EDGE_WEIGHT_TYPE'):
+                distance_type = _get_data(line)
+            elif line.rstrip() == 'NODE_COORD_SECTION':
+                locations['depot'] = np.array(f.readline().rstrip().split()[1:], dtype=float, ndmin=2)  # 1
+                _end_o = (_dim - 1) // 2
+                i = 0
+                while (loc := f.readline().rstrip()) != 'PICKUP_AND_DELIVERY_SECTION':
+                    i += 1
+                    if i <= _end_o:
+                        locations['O'].append(loc.split()[1:])
+                    else:
+                        locations['D'].append(loc.split()[1:])
+                else:
+                    total_capacity = 0
+                    while (loc := f.readline().rstrip()) != 'DEPOT_SECTION':
+                        _node, _capacity, *_ = loc.split()
+                        _capacity = int(_capacity)
+                        # use non-negative capacity
+                        _capacity = _capacity if _capacity >= 0 else 0                
+                        total_capacity += _capacity
+                        capacities[int(_node) - 1] = _capacity
+                    break 
+        f.close()
+    locations['O'], locations['D'] = np.asarray(locations['O'], dtype=float), np.asarray(locations['D'], dtype=float)
+    capacity = (total_capacity * (1 + capacity_slack) // num_vehicles) + 1
+    return locations, capacities, num_vehicles, capacity, distance_type
+
+
+def read_pdvrp_instance_data(instance_path):
+    locations = defaultdict(deque)
+    with open(instance_path) as f:
+        while line := f.readline():
+            if line.startswith('COMMENT'):
+                num_taxi = int(line[line.index('vehicle') + 8: line.index('seed')])
+            if line.rstrip() == 'NODE_COORD_SECTION':
+                # dummy(+0), taxi(-0)
+                locations['dummy'] = np.array(f.readline().rstrip().split()[1:], dtype=float, ndmin=2)
+                for _ in range(num_taxi):
+                    loc = f.readline().rstrip()
+                    locations['taxi'].append(loc.split()[1:]) 
+                while (loc := f.readline().rstrip()) != 'PRECEDENCE_SECTION':
+                    if loc.startswith('+'):
+                        locations['O'].append(loc.split()[1:])
+                    else:
+                        locations['D'].append(loc.split()[1:])
+                break 
+        f.close()
+    locations['taxi'], locations['O'], locations['D'] = np.asarray(locations['taxi'], dtype=float), np.asarray(locations['O'], dtype=float), np.asarray(locations['D'], dtype=float)
+    return locations
 
 
 def get_lkh3_tour(tour_path):
@@ -238,3 +339,53 @@ def generate_pdtsp_instance(num_O: int,
             for line in lkh3_instance_lines:
                 f.write(line + '\n')
         print(f'Instance {lkh3_instance_name} saved to {lkh3_instance_save_to_dir}')
+
+
+def generate_pdvrp_instance(num_O: int, 
+                            num_taxi: int, 
+                            instance_save_to_dir: str,
+                            # lkh3_instance_save_to_dir: str = None,
+                            seed: int = None,
+                            *, 
+                            random_seed_range: list = [0, 2**15],
+                            x_range: list = [0, 1000],
+                            y_range: list = [0, 1000],
+                            ):
+    seed = random.randint(*random_seed_range) if seed is None else seed
+    np.random.seed(seed)
+    dim = num_O * 2 + 1 + num_taxi
+    # Uniformly generate (x,y) coordinate
+    x = np.random.uniform(low=x_range[0], high=x_range[1], size=dim).astype(int)
+    y = np.random.uniform(low=y_range[0], high=y_range[1], size=dim).astype(int)
+    # The first num_taxi + 1 rows ought to be the same (x,y) coordinate
+    x[1: 1 + num_taxi] = x[0]
+    y[1: 1 + num_taxi] = y[0]
+
+    os.makedirs(instance_save_to_dir, exist_ok=True)
+    instance_name_header = f'random-{num_O:03}-{num_taxi:05}-{seed:05}'
+    instance_name = instance_name_header + '.pdvrp'
+
+    # header
+    instance_lines = [
+        f'NAME: {instance_name_header}',
+        'TYPE: PDVRP',
+        f'COMMENT: size={num_O} vehicle={num_taxi} seed={seed}',
+        f'DIMENSION: {dim}',
+        'EDGE_WEIGHT_TYPE: EUC_2D',
+        'NODE_COORD_SECTION'
+    ]
+    # NODE_COORD_SECTION
+    instance_lines += [f'+0 {x[0]} {y[0]}'] + [f'-0 {x[i]} {y[i]}' for i, _ in enumerate(range(num_taxi), start=1)]
+    _shift = num_taxi + 1
+    instance_lines += [f'+{(i - _shift + 2) // 2} {x[i]} {y[i]}' if i % 2 == 0 else f'-{(i - _shift + 2) // 2} {x[i]} {y[i]}' for i, _ in enumerate(range(num_O * 2), start=_shift) ]
+    # PRECEDENCE_SECTION
+    instance_lines += ['PRECEDENCE_SECTION']
+    instance_lines += [f'+{i} -{i}' for i in range(num_O + 1)]
+    instance_lines += ['EOF']
+
+    with open(os.path.join(instance_save_to_dir, instance_name), 'w') as f:
+        for line in instance_lines:
+            f.write(line + '\n')
+    print(f'Instance {instance_name} saved to {instance_save_to_dir}')
+
+    
