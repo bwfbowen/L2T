@@ -99,16 +99,14 @@ def get_pdp_default_action_dict(env_instance):
     _actions = [ 
                'actions.InBlockAction({idx}, operator=operators.TwoOptOperator())',
                'actions.InBlockAction({idx}, operator=operators.SameBlockExchangeOperator())',
-               'actions.PathAction({idx}, operator=operators.SegmentTwoOptOperator())',
-               'actions.PathAction({idx}, operator=operators.TwoKOptOperator())',
-               'actions.PathAction({idx}, operator=operators.ExchangeOperator())',
-               'actions.PathAction({idx}, operator=operators.InsertOperator())',
-               'actions.PathAction({idx}, operator=operators.OForwardOperator(length=2))',
-               'actions.PathAction({idx}, operator=operators.OForwardOperator(length=3))',
-               'actions.PathAction({idx}, operator=operators.OForwardOperator(length=4))',
-               'actions.PathAction({idx}, operator=operators.DBackwardOperator(length=2))',
-               'actions.PathAction({idx}, operator=operators.DBackwardOperator(length=3))',
-               'actions.PathAction({idx}, operator=operators.DBackwardOperator(length=4))',
+               'actions.PathAction({idx}, operator=operators.SegmentTwoOptOperator(include_taxi_node=False))',
+               'actions.PathAction({idx}, operator=operators.TwoKOptOperator(include_taxi_node=False))',
+               'actions.PathAction({idx}, operator=operators.ExchangeOperator(include_taxi_node=False))',
+               'actions.PathAction({idx}, operator=operators.InsertOperator(include_taxi_node=False))',
+               'actions.PathAction({idx}, operator=operators.OForwardOperator(length=2, include_taxi_node=False))',
+               'actions.PathAction({idx}, operator=operators.OForwardOperator(length=3, include_taxi_node=False))',
+               'actions.PathAction({idx}, operator=operators.DBackwardOperator(length=2, include_taxi_node=False))',
+               'actions.PathAction({idx}, operator=operators.DBackwardOperator(length=3, include_taxi_node=False))',
                'actions.PathAction({idx}, operator=operators.ODPairsExchangeOperator())',
                'actions.PathAction({idx}, operator=operators.MixedBlockExchangeOperator())',
                'actions.MultiPathsAction({idx}, operator=operators.ODPairsInsertMultiVehicles())',
@@ -117,6 +115,16 @@ def get_pdp_default_action_dict(env_instance):
     _action_dict = {idx: eval(_action.format(idx=idx)) for idx, _action in enumerate(_actions, start=1)}
     _action_dict[0] = env_instance._regenerate_feasible_solution_with_random_actions
     return _action_dict
+
+
+def get_pdp_default_random_actions():
+       _random_actions = ['actions.PathRandomAction({idx}, operator=operators.RandomODPairsExchangeOperator(change_percentage=0.1))',
+                          'actions.PathRandomAction({idx}, operator=operators.RandomOForwardOperator(change_percentage=0.2, include_taxi_node=False))',
+                          'actions.PathRandomAction({idx}, operator=operators.RandomDBackwardOperator(change_percentage=0.2))',
+                          'actions.PathRandomAction({idx}, operator=operators.RandomODPairsInsertMultiVehicles(change_percentage=0.1))'
+                          ]
+       _random_actions = [eval(a.format(idx=idx)) for idx, a in enumerate(_random_actions)]
+       return _random_actions
 
 
 class MultiODEnv(gym.Env):
