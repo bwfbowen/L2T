@@ -6,9 +6,8 @@ import gymnasium as gym
 
 from . import problem
 from . import solution
-from . import actions
-from . import operators
 from . import utils 
+from .action_dicts import get_default_action_dict, get_default_random_actions, get_pdp_default_action_dict, get_pdp_default_random_actions
 
 
 EPSILON = 1e-5
@@ -16,115 +15,6 @@ MultiODProblem = problem.MultiODProblem
 PDP = problem.PDP
 MultiODSolution = solution.MultiODSolution
 SliceableDeque = utils.SliceableDeque
-
-
-def get_default_action_dict(env_instance):
-    _actions = [ 
-               'actions.InBlockAction({idx}, operator=operators.TwoOptOperator())',
-               'actions.InBlockAction({idx}, operator=operators.SameBlockExchangeOperator())',
-               'actions.PathAction({idx}, operator=operators.SegmentTwoOptOperator())',
-               'actions.PathAction({idx}, operator=operators.TwoKOptOperator())',
-               'actions.PathAction({idx}, operator=operators.ExchangeOperator())',
-               'actions.PathAction({idx}, operator=operators.InsertOperator())',
-               'actions.PathAction({idx}, operator=operators.OForwardOperator(length=2))',
-               'actions.PathAction({idx}, operator=operators.OForwardOperator(length=3))',
-               'actions.PathAction({idx}, operator=operators.OForwardOperator(length=4))',
-               'actions.PathAction({idx}, operator=operators.OForwardOperator(length=5))',
-               'actions.PathAction({idx}, operator=operators.OForwardOperator(length=6))',
-               'actions.PathAction({idx}, operator=operators.OForwardOperator(length=7))',
-               'actions.PathAction({idx}, operator=operators.OForwardOperator(length=8))',
-               'actions.PathAction({idx}, operator=operators.OForwardOperator(length=9))',
-               'actions.PathAction({idx}, operator=operators.DBackwardOperator(length=2))',
-               'actions.PathAction({idx}, operator=operators.DBackwardOperator(length=3))',
-               'actions.PathAction({idx}, operator=operators.DBackwardOperator(length=4))',
-               'actions.PathAction({idx}, operator=operators.DBackwardOperator(length=5))',
-               'actions.PathAction({idx}, operator=operators.DBackwardOperator(length=6))',
-               'actions.PathAction({idx}, operator=operators.DBackwardOperator(length=7))',
-               'actions.PathAction({idx}, operator=operators.DBackwardOperator(length=8))',
-               'actions.PathAction({idx}, operator=operators.DBackwardOperator(length=9))',
-               'actions.PathAction({idx}, operator=operators.ODPairsExchangeOperator())',
-               'actions.PathAction({idx}, operator=operators.MixedBlockExchangeOperator())'
-               ]
-    _action_dict = {idx: eval(_action.format(idx=idx)) for idx, _action in enumerate(_actions, start=1)}
-    _action_dict[0] = env_instance._regenerate_feasible_solution_with_random_actions
-    return _action_dict
-
-
-def get_naive_action_dict(env_instance):
-    _actions = [ 
-               'actions.PathAction({idx}, operator=operators.ExchangeOperator())',
-               'actions.PathAction({idx}, operator=operators.InsertOperator())',
-               ]
-    _action_dict = {idx: eval(_action.format(idx=idx)) for idx, _action in enumerate(_actions, start=1)}
-    _action_dict[0] = env_instance._regenerate_feasible_solution
-    return _action_dict
-
-
-def get_feasible_mapping_action_dict(env_instance):
-    _actions = [ 
-               'actions.InBlockAction({idx}, operator=operators.TwoOptOperator())',
-               'actions.InBlockAction({idx}, operator=operators.SameBlockExchangeOperator())',
-               'actions.PathAction({idx}, operator=operators.SegmentTwoOptOperator())',
-               'actions.PathAction({idx}, operator=operators.TwoKOptOperator())',
-               'actions.PathAction({idx}, operator=operators.OForwardOperator(length=1))',
-               'actions.PathAction({idx}, operator=operators.OForwardOperator(length=2))',
-               'actions.PathAction({idx}, operator=operators.OForwardOperator(length=3))',
-               'actions.PathAction({idx}, operator=operators.OForwardOperator(length=4))',
-               'actions.PathAction({idx}, operator=operators.OForwardOperator(length=5))',
-               'actions.PathAction({idx}, operator=operators.DBackwardOperator(length=1))',
-               'actions.PathAction({idx}, operator=operators.DBackwardOperator(length=2))',
-               'actions.PathAction({idx}, operator=operators.DBackwardOperator(length=3))',
-               'actions.PathAction({idx}, operator=operators.DBackwardOperator(length=4))',
-               'actions.PathAction({idx}, operator=operators.DBackwardOperator(length=5))',
-               'actions.PathAction({idx}, operator=operators.ODPairsExchangeOperator())',
-               'actions.PathAction({idx}, operator=operators.MixedBlockExchangeOperator())'
-               ]
-    _action_dict = {idx: eval(_action.format(idx=idx)) for idx, _action in enumerate(_actions, start=1)}
-    _action_dict[0] = env_instance._regenerate_feasible_solution_with_random_actions
-    return _action_dict
-
-
-def get_default_random_actions():
-       _random_actions = ['actions.PathRandomAction({idx}, operator=operators.RandomODPairsExchangeOperator(change_percentage=0.1))',
-                          'actions.PathRandomAction({idx}, operator=operators.RandomOForwardOperator(change_percentage=0.2))',
-                          'actions.PathRandomAction({idx}, operator=operators.RandomDBackwardOperator(change_percentage=0.2))',
-                          'actions.PathRandomAction({idx}, operator=operators.RandomMixedBlockExchangeOperator(change_percentage=0.1))',
-                          'actions.PathRandomAction({idx}, operator=operators.RandomSameBlockExchangeOperator(change_percentage=0.1))' 
-                          ]
-       _random_actions = [eval(a.format(idx=idx)) for idx, a in enumerate(_random_actions)]
-       return _random_actions
-
-
-def get_pdp_default_action_dict(env_instance):
-    _actions = [ 
-               'actions.InBlockAction({idx}, operator=operators.TwoOptOperator())',
-               'actions.InBlockAction({idx}, operator=operators.SameBlockExchangeOperator())',
-               'actions.PathAction({idx}, operator=operators.SegmentTwoOptOperator(include_taxi_node=False))',
-               'actions.PathAction({idx}, operator=operators.TwoKOptOperator(include_taxi_node=False))',
-               'actions.PathAction({idx}, operator=operators.ExchangeOperator(include_taxi_node=False))',
-               'actions.PathAction({idx}, operator=operators.InsertOperator(include_taxi_node=False))',
-               'actions.PathAction({idx}, operator=operators.OForwardOperator(length=2, include_taxi_node=False))',
-               'actions.PathAction({idx}, operator=operators.OForwardOperator(length=3, include_taxi_node=False))',
-               'actions.PathAction({idx}, operator=operators.DBackwardOperator(length=2, include_taxi_node=False))',
-               'actions.PathAction({idx}, operator=operators.DBackwardOperator(length=3, include_taxi_node=False))',
-               'actions.PathAction({idx}, operator=operators.ODPairsExchangeOperator())',
-               'actions.PathAction({idx}, operator=operators.MixedBlockExchangeOperator())',
-               'actions.MultiPathsAction({idx}, operator=operators.ODPairsInsertMultiVehicles())',
-               'actions.MultiPathsAction({idx}, operator=operators.ODPairsExchangeMultiVehicles())'
-               ]
-    _action_dict = {idx: eval(_action.format(idx=idx)) for idx, _action in enumerate(_actions, start=1)}
-    _action_dict[0] = env_instance._regenerate_feasible_solution_with_random_actions
-    return _action_dict
-
-
-def get_pdp_default_random_actions():
-       _random_actions = ['actions.PathRandomAction({idx}, operator=operators.RandomODPairsExchangeOperator(change_percentage=0.1))',
-                          'actions.PathRandomAction({idx}, operator=operators.RandomOForwardOperator(change_percentage=0.2, include_taxi_node=False))',
-                          'actions.PathRandomAction({idx}, operator=operators.RandomDBackwardOperator(change_percentage=0.2))',
-                          'actions.PathRandomAction({idx}, operator=operators.RandomODPairsInsertMultiVehicles(change_percentage=0.1))'
-                          ]
-       _random_actions = [eval(a.format(idx=idx)) for idx, a in enumerate(_random_actions)]
-       return _random_actions
 
 
 class MultiODEnv(gym.Env):
@@ -423,6 +313,7 @@ class PDPEnv(MultiODEnv):
                          random_actions=random_actions)
         self.problem = problem if problem is not None else PDP(num_O=num_O, num_taxi=num_taxi, locations=locations, capacity=capacity, capacities=capacities, capacity_slack=capacity_slack, distance_type=distance_type, ignore_from_dummy_cost=ignore_from_dummy_cost, ignore_to_dummy_cost=ignore_to_dummy_cost, seed=seed)
         self._action_dict = action_dict(self) if action_dict is not None else get_pdp_default_action_dict(self)
+        self.action_space = gym.spaces.Discrete(len(self._action_dict))
         self.observation_space = gym.spaces.Dict(
             {'problem': gym.spaces.Box(low=np.array([-np.inf, -np.inf, 0] + [0] * k_recent + [-1] * k_recent), 
                                        high=np.array([np.inf, np.inf, 1] + [len(self._action_dict) - 1] * k_recent + [1] * k_recent),
@@ -433,6 +324,7 @@ class PDPEnv(MultiODEnv):
                                        shape=(self.problem.num_O * 2, 15),
                                        dtype=np.float32)})
         self.distance_rescale_factor = 1 / 1000 if distance_type == 'EXACT_2D' else 1
+        self._random_actions = random_actions if random_actions is not None else get_pdp_default_random_actions()
     
     def calc_features_of_solution(self, solution):
         features = np.zeros((self.problem.num_O * 2, 15), dtype=np.float32)
@@ -442,9 +334,12 @@ class PDPEnv(MultiODEnv):
             remain = path.capacity - cumcap 
             for i in range(1, n):
                 node = path.get_by_seq_id(i)
-                _prev = node.prev_node
-                _prev_id, _prev_OD = _prev.node_id, _prev.OD_type if _prev.OD_type is not None else 2
+                _prev = node.prev_node if node.prev_node is not None else 0
                 _next = node.next_node if node.next_node is not None else 0
+                if _prev != 0:
+                    _prev_id, _prev_OD = _prev.node_id, _prev.OD_type 
+                else:
+                    _prev_id, _prev_OD = 0, 2
                 if _next != 0:
                     _next_id, _next_OD = _next.node_id, _next.OD_type 
                 else:
@@ -466,3 +361,15 @@ class PDPEnv(MultiODEnv):
                 features[node.node_id - 1, 9:12] = f3 
                 features[node.node_id - 1, 12:15] = f4 
         return features
+    
+    def _calc_reward(self, all_delta):
+        return -all_delta * self.distance_rescale_factor
+    
+    def _calc_infos(self, delta: float = 0., k_recent_action=None, k_recent_delta_sign=None):
+        infos = {}
+        infos['delta'] = delta * self.distance_rescale_factor 
+        infos['cost'] = self.problem.calc_cost(self.solution) * self.distance_rescale_factor
+        infos['no_improvement'] = self._no_improvement / self._max_no_improvement
+        infos['delta_best'] = (infos['cost'] - self.best_cost) * self.distance_rescale_factor
+        infos['k_recent_action'], infos['k_recent_delta_sign'] = k_recent_action, k_recent_delta_sign
+        return infos 

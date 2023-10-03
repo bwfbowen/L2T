@@ -243,13 +243,21 @@ def get_lkh3_tour(tour_path):
     return tour 
 
 
-def get_ortools_tour(tour_path, skip_first_lines: int = 3, num_taxi: int = 1):
+def get_ortools_tour(tour_path, skip_first_lines: int = 2, num_taxi: int = 1, include_taxi_node: bool = True):
     with open(tour_path) as f:
         for _ in range(skip_first_lines):
             next(f)
-        tour_before_adding_dummy = list(map(int, f.readline().rstrip().split(' -> ')))
-        tour = [0] + tour_before_adding_dummy[:-1] + [0]
-    return tour 
+        paths = []
+        for _ in range(num_taxi):
+            next(f)
+            if include_taxi_node:
+                tour_before_adding_dummy = list(map(int, f.readline().rstrip().split(' -> ')))
+                tour = [0] + tour_before_adding_dummy[:-1] + [0]
+            else:
+                tour = list(map(int, f.readline().rstrip().split(' -> ')))
+            paths.append(tour)
+            next(f)
+    return paths 
 
 
 def generate_pdtsp_instance(num_O: int, 

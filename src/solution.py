@@ -90,7 +90,8 @@ class MultiODPath(Path):
 
         for node_id in node_ids:
             self.insert(node_id)
-            self.capacities.append(capacities[node_id])
+            if capacity is not None:
+                self.capacities.append(capacities[node_id])
         
         self.capacities = np.asarray(self.capacities)
         # self.cumcap = np.cumsum(self.capacities)
@@ -383,7 +384,8 @@ class MultiODSolution(Solution):
         if len(half1) == 0 or len(half2) == 0: return 
         h1, t1, h2, t2 = half1[0], half1[-1], half2[0], half2[-1]
         hp1, tn2 = h1.prev_node, t2.next_node
-        hp1.next_node = h2
+        if hp1 is not None:
+            hp1.next_node = h2
         if tn2 is not None:
             tn2.prev_node = t1
         h2.prev_node, t1.next_node = hp1, tn2 
@@ -391,7 +393,7 @@ class MultiODSolution(Solution):
         new_block = half2 + half1
         path.block_dict[block_id] = new_block
         _prev = new_block[0].prev_node
-        _prev_seq_id = _prev.seq_id
+        _prev_seq_id = _prev.seq_id if _prev is not None else 0
         if not update_capacity:
             for _in_block_seq_id, node in enumerate(path.block_dict[block_id]):
                 node.in_block_seq_id = _in_block_seq_id
@@ -444,6 +446,8 @@ class MultiODSolution(Solution):
             path2 = self.paths[path_id2]
 
         if target_o_seq_id < 1 or target_d_seq_id < 1 or target_d_seq_id < target_o_seq_id: return
+        if target_o_seq_id >= len(path2) - 1:
+            target_o_seq_id = len(path2) - 1
         if target_d_seq_id >= len(path2) - 1:
             target_d_seq_id = len(path2)
         o: Node = path1.get_by_node_id(o_id) 

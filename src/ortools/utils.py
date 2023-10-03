@@ -114,5 +114,4 @@ def display_pdp_ortools_result(problem, manager, routing, solution):
         result_string += plan_output + '\n'
         total_distance += route_distance
         paths.append(path) 
-    total_distance = total_distance / 1000 if problem.distance_type == "EXACT_2D" else total_distance
     return result_string, total_distance, paths
