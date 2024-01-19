@@ -1,18 +1,23 @@
+from typing import Dict, List, Callable, NamedTuple
 from abc import abstractmethod
 
 import time
 import numpy as np
 import gymnasium as gym 
 
-from . import problem
+import dm_env
+from acme import specs 
+
+from . import problem as od_problem
 from . import solution
 from . import actions
 from . import operators
 from . import utils 
+from . import types 
 
 
 EPSILON = 1e-5
-MultiODProblem = problem.MultiODProblem
+MultiODProblem = od_problem.MultiODProblem
 MultiODSolution = solution.MultiODSolution
 SliceableDeque = utils.SliceableDeque
 
@@ -92,6 +97,10 @@ def get_default_random_actions():
                           ]
        _random_actions = [eval(a.format(idx=idx)) for idx, a in enumerate(_random_actions)]
        return _random_actions
+
+
+def get_default_candidate_actions_v2() -> List[actions.Action]:
+    return []
 
 
 class MultiODEnv(gym.Env):
@@ -351,3 +360,156 @@ class SparseMultiODEnv(MultiODEnv):
     def compute_reward(self, achieved_goal, desired_goal, info):
         reward = self._calc_reward(achieved_goal=achieved_goal, desired_goal=desired_goal, info=info)
         return reward 
+    
+
+class DMultiODEnv(dm_env.Environment):
+    def __init__(
+        self, 
+        problem: od_problem.MultiODProblemV2 = None,
+        candidate_actions: List[Callable] = None,
+        initial_strategy: str = '1by1',
+        k_recent_action: int = 10,
+        max_no_improvement: int = 6,
+        max_steps: int = int(4e4),
+        *,
+        num_nodes: int = 21,
+        locations: Dict = None,
+        seed: int = 0,
+        ignore_from_dummy_cost: bool = True,
+        ignore_to_dummy_cost: bool = True,
+        int_distance: bool = False
+    ):
+        super().__init__()
+        self._problem = problem if problem is not None else od_problem.MultiODProblemV2(num_nodes, locations, seed, ignore_from_dummy_cost, ignore_to_dummy_cost, int_distance)
+        self._actions = candidate_actions or get_default_candidate_actions_v2()
+        self.num_actions = len(candidate_actions)
+        self.observation_space = self.observation_spec()
+        self._obs = np.zeros(self.observation_space.shape, dtype=self.observation_space.dtype)
+        self._raw_node_obs = np.zeros((len(self._problem.locations) - 1, 12), dtype=np.float32)
+        self._reset_next_step = True
+        self._initial_startegy = initial_strategy
+        self._k_recent_action = k_recent_action
+        self._max_no_improvement = max_no_improvement
+        self._env_state = types.EnvState(
+            problem=self._problem.info,
+            action_history=np.zeros((self._k_recent_action, 2), dtype=np.float32))
+        self._best_sol = types.BestSol()
+        self._current_cost = 0.
+        self._max_steps = max_steps
+        self._current_step = 0
+    
+    def _init_solution(self):
+        if self._initial_startegy == '1by1':
+            paths = [[node for item in self._problem.od_pairing.items() if self._problem.od_type[item[0]] == 0 for node in item]]
+            sol = solution.MultiODSolutionV2(paths, self._problem)
+            self._current_cost = self._problem.calc_cost(sol)
+            self._best_sol = types.BestSol(
+                paths=sol.paths,
+                best_cost=self._current_cost,
+                best_step=0)
+            self._env_state = types.EnvState(
+                problem=sol.info,
+                action_history=np.zeros((self._k_recent_action, 2), dtype=np.float32),
+                improvement=types.Improvement())
+            return sol 
+        
+    def _observe(self, sol: solution.MultiODSolutionV2):
+        info = sol.info
+        paths = sol.paths
+        for i in range(1, len(info.locations)):
+            seq_i = info.sequence[i]
+            path = paths[seq_i.sequence]
+            prev_, next_ = path[seq_i.index - 1], path[seq_i.index + 1]
+            self._raw_node_obs[i, :6] = info.locations[[prev_, i, next_]]
+            self._raw_node_obs[i, 6:9] = info.distance_matrix[[prev_, i, next_], [i, next_, prev_]]
+            self._raw_node_obs[i, 9:12] = info.od_type[[prev_, i, next_]]
+        num_non_depot_nodes = len(info.locations) - 1
+        node_dim = num_non_depot_nodes * 12
+        action_history_dim = node_dim + 2 * self._k_recent_action
+        improvement_dim = action_history_dim + 3
+        self._obs[:node_dim] = self._raw_node_obs.flatten()
+        self._obs[node_dim: action_history_dim] = self._env_state.action_history.flatten()
+        self._obs[action_history_dim: improvement_dim] = [
+            self._env_state.improvement.delta, 
+            self._env_state.improvement.delta_best,
+            self._env_state.improvement.no_improvement]
+        return self._obs
+
+    def reset(self):
+        self._reset_next_step = False 
+        self.solution = self._init_solution()
+        self._current_step = 0
+        observation = self._observe(self.solution)
+        return dm_env.restart(observation)
+    
+    def step(self, action):
+        if self._reset_next_step:
+            return self.reset()
+        self.solution, delta, _ = self._actions[action](self.solution)
+        self._current_step += 1
+        self._current_cost = self._problem.calc_cost(self.solution)
+        best_cost = self._best_sol.best_cost
+        delta_best = self._current_cost - best_cost
+        action_history = self._env_state.action_history
+        action_history[:-1] = action_history[1:]
+        action_history[-1, 0] = [action, np.sign(delta)]
+        reward = -delta 
+        if self._current_cost < best_cost:
+            self._best_sol = types.BestSol(
+                paths=self.solution.paths,
+                best_cost=self._current_cost,
+                best_step=self._current_step)
+        done = self._current_step >= self._max_steps
+        no_improvement = self._env_state.improvement.no_improvement
+        if delta >= -EPSILON:
+            no_improvement += 1
+        else:
+            no_improvement = 0
+        # update state
+        self._env_state = types.EnvState(
+            problem=self.solution.info,
+            action_history=action_history,
+            improvement=types.Improvement(
+                delta=delta, 
+                delta_best=delta_best,
+                no_improvement=no_improvement))
+        observation = self._observe(self.solution)
+        if done:
+            self._reset_next_step = True 
+            return dm_env.termination(reward, observation)
+        else:
+            dm_env.transition(reward, observation)
+
+    def observation_spec(self):
+        num_non_depot_nodes = len(self._problem.locations) - 1
+        total_dim = num_non_depot_nodes * 12 + 2 * self._k_recent_action + 3
+        minimum = (
+            [0] * num_non_depot_nodes * 9 
+            + [-1] * num_non_depot_nodes * 3 
+            + [0] * self._k_recent_action 
+            + [-1] * self._k_recent_action 
+            + [-np.inf] * 2
+            + [0])
+        maximum = (
+            [np.inf] * num_non_depot_nodes * 9
+            + [1] * num_non_depot_nodes * 3
+            + [len(self.num_actions)] * self._k_recent_action
+            + [1] * self._k_recent_action
+            + [np.inf] * 2
+            + [self._max_no_improvement])
+        observation_space = specs.BoundedArray(
+            (total_dim,), 
+            dtype='float32', 
+            minimum=minimum, 
+            maximum=maximum)
+        return observation_space 
+
+    def action_spec(self):
+        return specs.DiscreteArray(num_values=self.num_actions, dtype='int32', name='action')
+    
+    def reward_spec(self):
+        return specs.Array((), dtype='float32')
+    
+    def discount_spec(self):
+        return specs.Array((), dtype='float32')
+        

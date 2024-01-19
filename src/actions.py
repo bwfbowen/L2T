@@ -1,5 +1,6 @@
 import copy
 import gymnasium as gym 
+import dm_env
 
 from . import operators
 from . import solution
@@ -70,6 +71,31 @@ class PathAction(Action):
         return improved_path, delta, modified
     
 
+class PathActionV2(Action):
+    def __init__(self, action_index: int, operator: Operator, num_iters: int = 10):
+        super().__init__(action_index=action_index, action_type='path', operator=operator)
+        self._num_iters = num_iters
+
+    def __call__(self, env: dm_env.Environment):
+        improved_solution = env.solution
+        all_delta = 0.
+        for path_id, path in enumerate(improved_solution.paths):
+            modified = True 
+            for i in range(self._num_iters):
+                improved_solution, delta, modified = self._update(improved_solution, path_id)
+                if modified:
+                    all_delta += delta 
+                else:
+                    break 
+        return improved_solution, all_delta
+    
+    def _update(self, solution: MultiODSolution, path_id: int = 0):
+        improved_solution, delta, label = self.operator(solution=solution, path_id=path_id)
+        # print(label)
+        modified = True if label else False
+        return improved_solution, delta, modified    
+    
+
 class PathRandomAction(Action):
     def __init__(self, action_index: int, operator: Operator):
         super().__init__(action_index=action_index, action_type='path-random', operator=operator)
@@ -82,3 +108,17 @@ class PathRandomAction(Action):
             
             all_delta += delta 
         return improved_solution, all_delta
+    
+
+class PathRandomActionV2(Action):
+    def __init__(self, action_index: int, operator: Operator):
+        super().__init__(action_index=action_index, action_type='path-random', operator=operator)
+    
+    def __call__(self, env: dm_env.Environment):
+        improved_solution = env.solution
+        all_delta = 0.
+        for path_id, path in enumerate(improved_solution.paths):
+            improved_solution, delta, _ = self.operator(solution=improved_solution, path_id=path_id)
+            
+            all_delta += delta 
+        return improved_solution, all_delta    

@@ -6,6 +6,7 @@ import numpy as np
 
 from . import solution
 from . import utils 
+from src import types
 
 EPSILON = 1e-5
 
@@ -23,7 +24,7 @@ class Operator:
     def __call__(self, solution: Solution):
         improved_solution, delta, label = solution, 0, None 
         return improved_solution, delta, label
-  
+          
 
 class TwoOptOperator(Operator):
     def __init__(self):
@@ -110,6 +111,55 @@ class SegmentTwoOptOperator(Operator):
             return improved_path, min_delta, label
         
 
+class SegmentTwoOptOperatorV2(Operator):
+    def __init__(self):
+        super().__init__(operator_type='path')
+    
+    def __call__(self, solution: solution.MultiODSolutionV2, path_id: int = 0, min_delta=-EPSILON):
+        path: types.Path = solution.paths[path_id]
+        info = solution.info
+        n = len(path) - 1
+
+        starts_from = 1
+        segment_starts, temp_Ds = SliceableDeque([starts_from]), set([info.od_pairing[path[starts_from]]])
+        for seq_id in range(starts_from + 1, n):
+            node_id = path[seq_id]
+            if info.od_type[node_id] == 0:
+                temp_Ds.add(info.od_pairing[node_id])
+            else:
+                if node_id in temp_Ds:
+                    segment_starts.append(seq_id)
+                    temp_Ds = set([node_id])
+        segment_starts.append(n)
+        label = None
+        for i in range(0, len(segment_starts) - 1):
+            start, end = segment_starts[i], segment_starts[i + 1]
+            for first in range(start, end - 1):
+                node1 = path[first]
+                prev1 = path[first - 1] 
+                for second in range(first + 1, end):
+                    node2 = path[second]
+                    next2 = path[second + 1]
+                    before = (
+                        info.distance_matrix[prev1, node1] 
+                        + info.distance_matrix[node2, next2])
+                    after = (
+                        info.distance_matrix[prev1, node2]
+                        + info.distance_matrix[node1, next2])
+                    delta = after - before
+                    if delta < min_delta:
+                        min_delta = delta
+                        label = first, second
+        if label is None:
+            return None, None, None
+        else:
+            first, second = label[0], label[1]
+            path[first: second + 1] = path[first: second + 1][::-1]
+            for idx, n in enumerate(path):
+                info.sequence[n] = types.SequenceInfo(sequence=path_id, index=idx)
+            return solution, min_delta, label        
+        
+
 class TwoKOptOperator(Operator):
     def __init__(self):
         super().__init__(operator_type='path')
@@ -177,7 +227,79 @@ class TwoKOptOperator(Operator):
             for label in reversed(labels):
                 first, second = label 
                 improved_path = solution.reverse_within_path(first + 1, second - 1, path=improved_path)
-            return improved_path, min_delta, labels                            
+            return improved_path, min_delta, labels  
+
+
+class TwoKOptOperatorV2(Operator):
+    def __init__(self):
+        super().__init__(operator_type='path')
+    
+    def __call__(self, solution: solution.MultiODSolutionV2, path_id: int = 0, min_delta=-EPSILON):
+        path: types.Path = solution.paths[path_id]
+        info = solution.info
+        n = len(path) - 1
+        F, R = np.zeros((n + 1, n + 1)), np.zeros((n + 1, n + 1))
+        F_label, R_label = defaultdict(list), defaultdict(list)
+        starts_from = 1
+        for seq_id1 in range(n - 1, starts_from, -1):
+            node1 = path[seq_id1]
+            next1 = path[seq_id1 + 1]
+            for seq_id2 in range(seq_id1 + 1, n):
+                node2 = path[seq_id2]
+                prev2 = path[seq_id2 - 1]
+                before = (
+                    info.distance_matrix[node1, next1]
+                    + info.distance_matrix[prev2, node2])
+                after = (
+                    info.distance_matrix[prev2, node1]
+                    + info.distance_matrix[node2, next1])
+                delta = after - before
+                if seq_id2 <= seq_id1 + 1:
+                    F[seq_id1, seq_id2] = 0
+                else:
+                    _cases = [F[seq_id1 + 1, seq_id2], F[seq_id1, seq_id2 - 1], delta + R[seq_id1 + 1, seq_id2 - 1]]
+                    min_idx = np.argmin(_cases)
+                    F[seq_id1, seq_id2] = _cases[min_idx]
+                    if min_idx == 0:
+                        F_label[(seq_id1, seq_id2)] = F_label[(seq_id1 + 1, seq_id2)]
+                    elif min_idx == 1:
+                        F_label[(seq_id1, seq_id2)] = F_label[(seq_id1, seq_id2 - 1)]
+                    else:
+                        F_label[(seq_id1, seq_id2)] = [(seq_id1, seq_id2)] + R_label[(seq_id1 + 1, seq_id2 - 1)]
+
+                if ((info.od_type[node1] == 0 and seq_id1 + 1 <= info.sequence[info.od_pairing[node1]].index <= seq_id2)
+                    or
+                    (info.od_type[node2] == 1 and seq_id1 <= info.sequence[info.od_pairing[node2]].index <= seq_id2 - 1)):
+                    R[seq_id1, seq_id2] = np.inf
+                elif seq_id1 == seq_id2:
+                    R[seq_id1, seq_id2] = 0
+                elif seq_id2 == seq_id1 + 1 and not (is_od := info.od_type[node1] == 0 and info.od_pairing[node1] == node2):
+                    R[seq_id1, seq_id2] = 0
+                elif seq_id2 == seq_id1 + 1 and is_od:
+                    R[seq_id1, seq_id2] = np.inf 
+                else:
+                    _reverse_cases = [R[seq_id1 + 1, seq_id2], R[seq_id1, seq_id2 - 1], delta + F[seq_id1 + 1, seq_id2 - 1]]
+                    rev_min_idx = np.argmin(_reverse_cases)
+                    R[seq_id1, seq_id2] = _reverse_cases[rev_min_idx]
+                    if rev_min_idx == 0:
+                        R_label[(seq_id1, seq_id2)] = R_label[(seq_id1 + 1, seq_id2)]
+                    elif rev_min_idx == 1:
+                        R_label[(seq_id1, seq_id2)] = R_label[(seq_id1, seq_id2 - 1)]
+                    else:
+                        R_label[(seq_id1, seq_id2)] = [(seq_id1, seq_id2)] + F_label[(seq_id1 + 1, seq_id2 - 1)]
+        min_index = np.unravel_index(np.argmin(F, axis=None), F.shape)
+        labels = F_label[min_index]
+        if not labels:
+            return None, None, None 
+        else:
+            min_delta = F[min_index]
+            improved_path = path
+            for label in reversed(labels):
+                first, second = label 
+                improved_path[first + 1: second] = improved_path[first + 1: second][::-1]
+            for idx, n in enumerate(improved_path):
+                info.sequence[n] = types.SequenceInfo(sequence=path_id, index=idx)
+            return solution, min_delta, labels                                   
 
 
 class ExchangeOperator(Operator):
@@ -245,6 +367,73 @@ class ExchangeOperator(Operator):
         return min_delta, label 
 
 
+class ExchangeOperatorV2(Operator):
+    def __init__(self):
+        super().__init__(operator_type='path')
+    
+    def __call__(self, solution: solution.MultiODSolutionV2, path_id: int = 0, min_delta=-EPSILON):
+        path: types.Path = solution.paths[path_id]
+        info = solution.info
+        n = len(path) - 1
+        label = None
+        starts_from = 1
+        for first in range(starts_from, n - 1):
+            node1 = path[first]
+            od1 = info.od_type[node1]
+            if od1 == 0:
+                d = info.od_pairing[node1]
+                inner_min_delta, inner_label = self._inner_loop(first, node1, path, info, first+1, info.sequence[d].index, min_delta)
+            else:
+                inner_min_delta, inner_label = self._inner_loop(first, node1, path, info, first+1, n, min_delta)
+            if inner_min_delta < min_delta:
+                min_delta = inner_min_delta
+                label = inner_label
+        if label is None:
+            return None, None, None
+        else:
+            improved_path = path
+            n1, n2 = improved_path[label[0]], improved_path[label[1]]
+            improved_path[label[0]], improved_path[label[1]] = n2, n1
+            info.sequence[n1] = types.SequenceInfo(sequence=path_id, index=label[1])
+            info.sequence[n2] = types.SequenceInfo(sequence=path_id, index=label[0])
+            return solution, min_delta, label  
+    
+    def _inner_loop(self, first: int, node1: int, path: types.Path, info: types.ProblemInfo, start, end, min_delta=-EPSILON):
+        label = None
+        for second in range(start, end):
+            node2 = path[second]
+            od2 = info.od_type[node2]
+            if od2 == 1 and info.sequence[info.od_pairing[node2]].index > info.sequence[node1].index:
+                continue  
+            prev1 = path[info.sequence[node1].index - 1]
+            next1 = path[info.sequence[node1].index + 1]
+            prev2 = path[info.sequence[node2].index - 1]
+            next2 = path[info.sequence[node2].index + 1]
+            if second == first + 1:
+                before = (
+                    info.distance_matrix[prev1, node1]
+                    + info.distance_matrix[node2, next2])
+                after = (
+                    info.distance_matrix[prev1, node2]
+                    + info.distance_matrix[node1, next2]) 
+            else:
+                before = (
+                    info.distance_matrix[prev1, node1]
+                    + info.distance_matrix[node1, next1]
+                    + info.distance_matrix[prev2, node2]
+                    + info.distance_matrix[node2, next2])
+                after = (
+                    info.distance_matrix[prev1, node2]
+                    + info.distance_matrix[node2, next1]
+                    + info.distance_matrix[prev2, node1]
+                    + info.distance_matrix[node1, next2])
+            delta = after - before
+            if delta < min_delta:
+                min_delta = delta
+                label = node1, node2
+        return min_delta, label 
+    
+
 class InsertOperator(Operator):
     def __init__(self):
         super().__init__(operator_type='path')
@@ -307,6 +496,72 @@ class InsertOperator(Operator):
                 min_delta = delta 
                 label = node1.node_id, second
         return min_delta, label 
+
+
+class InsertOperatorV2(Operator):
+    def __init__(self):
+        super().__init__(operator_type='path')
+    
+    def __call__(self, solution: solution.MultiODSolutionV2, path_id: int = 0, min_delta=-EPSILON):
+        path: types.Path = solution.paths[path_id]
+        info = solution.info
+        n = len(path) - 1
+        label = None
+        starts_from = 1
+        for first in range(starts_from, n):
+            node1 = path[first]
+            od1 = info.od_type[node1]
+            if od1 == 0:
+                d = info.od_pairing[node1]
+                inner_min_delta, inner_label = self._inner_loop(first, node1, path, info, starts_from, info.sequence[d].index, min_delta)
+            else:
+                o = info.od_pairing[node1]
+                inner_min_delta, inner_label = self._inner_loop(first, node1, path, info, info.sequence[o].index + 1, n, min_delta)
+            if inner_min_delta < min_delta:
+                min_delta = inner_min_delta
+                label = inner_label
+        if label is None:
+            return None, None, None
+        else:
+            improved_path = path 
+            node = improved_path.pop(label[0])
+            improved_path.insert(label[1], node)
+            for seq_idx, n in improved_path:
+                info.sequence[n] = types.SequenceInfo(sequence=path_id, index=seq_idx)
+            return solution, min_delta, label 
+    
+    def _inner_loop(self, first: int, node1: int, path: types.Path, info: types.ProblemInfo, start, end, min_delta=-EPSILON):
+        label, delta = None, 0.
+        for second in range(start, end):
+            node2 = path[second]
+            prev1 = path[info.sequence[node1].index - 1]
+            next1 = path[info.sequence[node1].index + 1] 
+            prev2 = path[info.sequence[node2].index - 1]
+            next2 = path[info.sequence[node2].index + 1] 
+            if first < second:
+                before = (
+                    info.distance_matrix[prev1, node1]
+                    + info.distance_matrix[node1, next1]
+                    + info.distance_matrix[node2, next2])
+                after = (
+                    info.distance_matrix[prev1, next1]
+                    + info.distance_matrix[node1, node2]
+                    + info.distance_matrix[node1, next2])
+                delta = after - before
+            elif first > second:
+                before = (
+                    info.distance_matrix[prev1, node1]
+                    + info.distance_matrix[node1, next1]
+                    + info.distance_matrix[prev2, node2])
+                after = (
+                    info.distance_matrix[prev1, next1]
+                    + info.distance_matrix[node1, node2]
+                    + info.distance_matrix[node1, prev2])
+                delta = after - before
+            if delta < min_delta:
+                min_delta = delta 
+                label = info.sequence[node1].index, second
+        return min_delta, label         
             
 
 class OForwardOperator(Operator):

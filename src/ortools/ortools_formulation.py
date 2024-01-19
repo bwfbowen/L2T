@@ -108,7 +108,8 @@ def ortools_pd_formulation_2D(p, name: str = 'MultiOD'):
     search_parameters = pywrapcp.DefaultRoutingSearchParameters()
     search_parameters.first_solution_strategy = (
         routing_enums_pb2.FirstSolutionStrategy.PARALLEL_CHEAPEST_INSERTION)
-
+    # 2 hours large instance comparison
+    search_parameters.time_limit.seconds = 7200
     # Solve the problem.
     solution = routing.SolveWithParameters(search_parameters)
 

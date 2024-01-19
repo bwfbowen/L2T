@@ -1,7 +1,8 @@
+from typing import List, Dict 
 from dataclasses import dataclass
 
-from . import problem
-from . import utils
+from src import types
+from src import utils
     
 
 SliceableDeque = utils.SliceableDeque
@@ -212,6 +213,7 @@ class MultiODSolution(Solution):
         self.paths = self._validate_list_and_create_paths(paths, problem)
     
     def set_is_valid(self, value, caller):
+        from src import problem
         if not isinstance(caller, problem.Problem):
             raise ValueError("Only Problem instances can change is_valid")
         self._is_valid = value
@@ -601,4 +603,30 @@ class MultiODSolution(Solution):
             return f'Invalid: {type(self).__name__}({self.paths})'
         
 
+class MultiODSolutionV2:
+    def __init__(
+        self, 
+        paths: List[List], 
+        problem_info: types.ProblemInfo = None
+    ) -> None:
+        self._paths = paths 
+        self._problem = problem_info._replace(sequence=self._generate_sequence_info(self.paths))
 
+    def _generate_sequence_info(paths: List[List]) -> Dict[int, types.SequenceInfo]:
+        sequence_info = {}
+        for path_idx, path in enumerate(paths):
+            for seq_idx, element in enumerate(path):
+                sequence_info[element] = types.SequenceInfo(path_idx, seq_idx)
+        return sequence_info
+
+    @property
+    def paths(self):
+        return self._paths
+    
+    @property
+    def info(self):
+        return self._problem
+    
+    @info.setter
+    def info(self, info):
+        self._problem = info 

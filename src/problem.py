@@ -1,10 +1,13 @@
+from typing import Dict
 import copy 
 import random
-from itertools import product
+from itertools import product, chain 
+import functools
 import numpy as np
 
-from . import solution
-from . import utils 
+from src import solution
+from src import utils 
+from src import types
 
 
 MultiODSolution = solution.MultiODSolution
@@ -199,3 +202,111 @@ class MultiODProblem(Problem):
             for idx in range(len(path) - 1):
                 cost += self.distance_matrix[path[idx], path[idx + 1]]
         return cost
+
+
+class MultiODProblemV2(Problem):
+    def __init__(
+        self, 
+        num_nodes: int = 21, 
+        locations: Dict = None,
+        seed: int = 0,
+        ignore_from_dummy_cost: bool = True, 
+        ignore_to_dummy_cost: bool = True,
+        int_distance: bool = False,
+    ):
+        if num_nodes % 2 == 0:
+            raise ValueError(f'number of nodes must be odd. But {num_nodes} nodes were given.')
+        self._info = self.generate_problem(
+            num_nodes=num_nodes,
+            locations=locations,
+            seed=seed,
+            ignore_from_dummy_cost=ignore_from_dummy_cost,
+            ignore_to_dummy_cost=ignore_to_dummy_cost,
+            int_distance=int_distance)
+
+    def generate_problem(
+        self, 
+        num_nodes, 
+        locations,
+        seed: int = 0,
+        ignore_from_dummy_cost: bool = True, 
+        ignore_to_dummy_cost: bool = True,
+        int_distance: bool = False,
+    ) -> types.ProblemInfo:
+        
+        np.random.seed(seed)
+        random.seed(seed)
+        if locations is not None:
+            num_O = len(locations['O'])
+            total_num_points = len(locations['O']) + len(locations['D'])
+            total_num_points += 1  # dummy
+            
+            _locations = []
+            _locations.append(locations['dummy'] if 'dummy' in locations else [0,0])
+            _locations.append(locations['O'])
+            _locations.append(locations['D'])
+            _locations = np.vstack(_locations)
+            self.num_nodes = 2 * num_O + 1
+        else:
+            total_num_points = num_nodes
+            num_O = (num_nodes - 1) // 2
+            _locations = np.random.uniform(size=(total_num_points, 2))  # (x,y)
+            self.num_nodes = num_nodes
+        self.total_num_points = total_num_points
+        locs = copy.deepcopy(_locations)
+        node_index = [*range(len(locs))]
+        # >=py38 feature
+        O = node_index[(_O_start_index := 1): (_D_start_index := _O_start_index + num_O)]
+        D = node_index[_D_start_index: _D_start_index + num_O]
+        edge_index = np.array([*zip(*product(node_index, node_index))])
+        distance_matrix = np.linalg.norm(locs[edge_index[0]] - locs[edge_index[1]],
+                                              ord=2, axis=1).reshape(len(node_index), len(node_index))
+        if ignore_from_dummy_cost:
+            distance_matrix[0, :] = 0
+        if ignore_to_dummy_cost:
+            distance_matrix[:, 0] = 0
+        
+        if int_distance:
+            distance_matrix = distance_matrix.astype(int)
+
+        return types.ProblemInfo(
+            locations=locs,
+            distance_matrix=distance_matrix,
+            od_pairing={k:v for k,v in zip(O+D, D+O)},
+            od_type={k:v for k,v in zip([0]+O+D, [-1]+[0]*len(O)+[1]*len(D))})
+    
+    def calc_cost(self, solution: solution.MultiODSolutionV2):
+        cost = 0.
+        for path in solution.paths:
+            for idx in range(len(path) - 1):
+                cost += self._info.distance_matrix[path[idx], path[idx + 1]]
+        return cost
+    
+    def is_feasible(self, paths: solution.MultiODSolutionV2):
+        if not isinstance(paths, solution.MultiODSolutionV2):
+            paths = solution.MultiODSolutionV2(paths, self.info)
+        
+        # Check each node appears exactly once
+        # except 0, which is the depot node
+        counter = functools.Counter(chain(*paths.paths))
+        if not all(count == 1 for key, count in counter.items() if key != 0):
+            return False 
+        
+        for path in paths:
+            for idx, node in enumerate(path):
+                # Check each path starts and ends at depot 
+                if idx == 0 or idx == len(path) - 1 and node != 0:
+                    return False 
+                # constraint 1: the OD pair should appear in the same path
+                node_paired = paths.info.od_pairing[node]
+                if paths.info.sequence[node].sequence != paths.info.sequence[node_paired].sequence:
+                    return False 
+                # constraint 2: O should appear before D
+                if node in self.OD_mapping and path.indexof(node) >= path.indexof(self.OD_mapping[node]):
+                    solution.set_is_valid(False, self)
+                    return False 
+        return True
+
+    @property
+    def info(self):
+        return self._info
