@@ -10,97 +10,19 @@ from acme import specs
 
 from . import problem as od_problem
 from . import solution
-from . import actions
-from . import operators
 from . import utils 
 from . import types 
+from . import action_dicts as ads
+
+EPSILON = 1e-5
+MultiODProblem = od_problem.MultiODProblem
 
 
 EPSILON = 1e-5
 MultiODProblem = od_problem.MultiODProblem
+PDP = od_problem.PDP
 MultiODSolution = solution.MultiODSolution
 SliceableDeque = utils.SliceableDeque
-
-
-def get_default_action_dict(env_instance):
-    _actions = [ 
-               'actions.InBlockAction({idx}, operator=operators.TwoOptOperator())',
-               'actions.InBlockAction({idx}, operator=operators.SameBlockExchangeOperator())',
-               'actions.PathAction({idx}, operator=operators.SegmentTwoOptOperator())',
-               'actions.PathAction({idx}, operator=operators.TwoKOptOperator())',
-               'actions.PathAction({idx}, operator=operators.ExchangeOperator())',
-               'actions.PathAction({idx}, operator=operators.InsertOperator())',
-               'actions.PathAction({idx}, operator=operators.OForwardOperator(length=2))',
-               'actions.PathAction({idx}, operator=operators.OForwardOperator(length=3))',
-               'actions.PathAction({idx}, operator=operators.OForwardOperator(length=4))',
-               'actions.PathAction({idx}, operator=operators.OForwardOperator(length=5))',
-               'actions.PathAction({idx}, operator=operators.OForwardOperator(length=6))',
-               'actions.PathAction({idx}, operator=operators.OForwardOperator(length=7))',
-               'actions.PathAction({idx}, operator=operators.OForwardOperator(length=8))',
-               'actions.PathAction({idx}, operator=operators.OForwardOperator(length=9))',
-               'actions.PathAction({idx}, operator=operators.DBackwardOperator(length=2))',
-               'actions.PathAction({idx}, operator=operators.DBackwardOperator(length=3))',
-               'actions.PathAction({idx}, operator=operators.DBackwardOperator(length=4))',
-               'actions.PathAction({idx}, operator=operators.DBackwardOperator(length=5))',
-               'actions.PathAction({idx}, operator=operators.DBackwardOperator(length=6))',
-               'actions.PathAction({idx}, operator=operators.DBackwardOperator(length=7))',
-               'actions.PathAction({idx}, operator=operators.DBackwardOperator(length=8))',
-               'actions.PathAction({idx}, operator=operators.DBackwardOperator(length=9))',
-               'actions.PathAction({idx}, operator=operators.ODPairsExchangeOperator())',
-               'actions.PathAction({idx}, operator=operators.MixedBlockExchangeOperator())'
-               ]
-    _action_dict = {idx: eval(_action.format(idx=idx)) for idx, _action in enumerate(_actions, start=1)}
-    _action_dict[0] = env_instance._regenerate_feasible_solution_with_random_actions
-    return _action_dict
-
-
-def get_naive_action_dict(env_instance):
-    _actions = [ 
-               'actions.PathAction({idx}, operator=operators.ExchangeOperator())',
-               'actions.PathAction({idx}, operator=operators.InsertOperator())',
-               ]
-    _action_dict = {idx: eval(_action.format(idx=idx)) for idx, _action in enumerate(_actions, start=1)}
-    _action_dict[0] = env_instance._regenerate_feasible_solution
-    return _action_dict
-
-
-def get_feasible_mapping_action_dict(env_instance):
-    _actions = [ 
-               'actions.InBlockAction({idx}, operator=operators.TwoOptOperator())',
-               'actions.InBlockAction({idx}, operator=operators.SameBlockExchangeOperator())',
-               'actions.PathAction({idx}, operator=operators.SegmentTwoOptOperator())',
-               'actions.PathAction({idx}, operator=operators.TwoKOptOperator())',
-               'actions.PathAction({idx}, operator=operators.OForwardOperator(length=1))',
-               'actions.PathAction({idx}, operator=operators.OForwardOperator(length=2))',
-               'actions.PathAction({idx}, operator=operators.OForwardOperator(length=3))',
-               'actions.PathAction({idx}, operator=operators.OForwardOperator(length=4))',
-               'actions.PathAction({idx}, operator=operators.OForwardOperator(length=5))',
-               'actions.PathAction({idx}, operator=operators.DBackwardOperator(length=1))',
-               'actions.PathAction({idx}, operator=operators.DBackwardOperator(length=2))',
-               'actions.PathAction({idx}, operator=operators.DBackwardOperator(length=3))',
-               'actions.PathAction({idx}, operator=operators.DBackwardOperator(length=4))',
-               'actions.PathAction({idx}, operator=operators.DBackwardOperator(length=5))',
-               'actions.PathAction({idx}, operator=operators.ODPairsExchangeOperator())',
-               'actions.PathAction({idx}, operator=operators.MixedBlockExchangeOperator())'
-               ]
-    _action_dict = {idx: eval(_action.format(idx=idx)) for idx, _action in enumerate(_actions, start=1)}
-    _action_dict[0] = env_instance._regenerate_feasible_solution_with_random_actions
-    return _action_dict
-
-
-def get_default_random_actions():
-       _random_actions = ['actions.PathRandomAction({idx}, operator=operators.RandomODPairsExchangeOperator(change_percentage=0.1))',
-                          'actions.PathRandomAction({idx}, operator=operators.RandomOForwardOperator(change_percentage=0.2))',
-                          'actions.PathRandomAction({idx}, operator=operators.RandomDBackwardOperator(change_percentage=0.2))',
-                          'actions.PathRandomAction({idx}, operator=operators.RandomMixedBlockExchangeOperator(change_percentage=0.1))',
-                          'actions.PathRandomAction({idx}, operator=operators.RandomSameBlockExchangeOperator(change_percentage=0.1))' 
-                          ]
-       _random_actions = [eval(a.format(idx=idx)) for idx, a in enumerate(_random_actions)]
-       return _random_actions
-
-
-def get_default_candidate_actions_v2() -> List[actions.Action]:
-    return []
 
 
 class MultiODEnv(gym.Env):
@@ -129,7 +51,7 @@ class MultiODEnv(gym.Env):
                  ):
         super().__init__()
         self.problem = problem if problem is not None else MultiODProblem(num_O=num_O, num_taxi=num_taxi, locations=locations, seed=seed)
-        self._action_dict = action_dict(self) if action_dict is not None else get_default_action_dict(self)
+        self._action_dict = action_dict(self) if action_dict is not None else ads.get_default_action_dict(self)
         self.action_space = gym.spaces.Discrete(len(self._action_dict))
         self.observation_space = gym.spaces.Dict(
             {'problem': gym.spaces.Box(low=np.array([-np.inf, -np.inf, 0] + [0] * k_recent + [-1] * k_recent), 
@@ -145,7 +67,7 @@ class MultiODEnv(gym.Env):
         self._k_recent = k_recent
         self._max_no_improvement = max_no_improvement
         self._best_cost_tolerance = best_cost_tolerance
-        self._random_actions = random_actions if random_actions is not None else get_default_random_actions()
+        self._random_actions = random_actions if random_actions is not None else ads.get_default_random_actions()
     
     def step(self, action: int):
         # print(action)
@@ -381,7 +303,7 @@ class DMultiODEnv(dm_env.Environment):
     ):
         super().__init__()
         self._problem = problem if problem is not None else od_problem.MultiODProblemV2(num_nodes, locations, seed, ignore_from_dummy_cost, ignore_to_dummy_cost, int_distance)
-        self._actions = candidate_actions or get_default_candidate_actions_v2()
+        self._actions = candidate_actions or ads.get_default_candidate_actions_v2()
         self.num_actions = len(candidate_actions)
         self.observation_space = self.observation_spec()
         self._obs = np.zeros(self.observation_space.shape, dtype=self.observation_space.dtype)
@@ -513,3 +435,102 @@ class DMultiODEnv(dm_env.Environment):
     def discount_spec(self):
         return specs.Array((), dtype='float32')
         
+
+
+class PDPEnv(MultiODEnv):
+    def __init__(
+        self, 
+        problem: MultiODProblem = None, 
+        action_dict: callable = None, 
+        *, 
+        num_O: int = 10, 
+        num_taxi: int = 1, 
+        locations: dict = None, 
+        capacity: int = None,
+        capacities: dict = None,
+        capacity_slack: float = .2,
+        distance_type: str = 'EXACT_2D',
+        ignore_from_dummy_cost: bool = True, 
+        ignore_to_dummy_cost: bool = True,
+        seed: int = 0, 
+        max_length: int = int(40000), 
+        max_time_length: int = int(1000), 
+        k_recent: int = 1, 
+        max_no_improvement: int = 6, 
+        best_cost_tolerance: float = 0.01, 
+        random_actions: list = None
+    ):
+        super().__init__(problem, 
+                         action_dict, 
+                         num_O=num_O, 
+                         num_taxi=num_taxi, 
+                         locations=locations, 
+                         seed=seed, 
+                         max_length=max_length, 
+                         max_time_length=max_time_length, 
+                         k_recent=k_recent, 
+                         max_no_improvement=max_no_improvement, 
+                         best_cost_tolerance=best_cost_tolerance, 
+                         random_actions=random_actions)
+        self.problem = problem if problem is not None else PDP(num_O=num_O, num_taxi=num_taxi, locations=locations, capacity=capacity, capacities=capacities, capacity_slack=capacity_slack, distance_type=distance_type, ignore_from_dummy_cost=ignore_from_dummy_cost, ignore_to_dummy_cost=ignore_to_dummy_cost, seed=seed)
+        self._action_dict = action_dict(self) if action_dict is not None else ads.get_pdp_default_action_dict(self)
+        self.action_space = gym.spaces.Discrete(len(self._action_dict))
+        self.observation_space = gym.spaces.Dict(
+            {'problem': gym.spaces.Box(low=np.array([-np.inf, -np.inf, 0] + [0] * k_recent + [-1] * k_recent), 
+                                       high=np.array([np.inf, np.inf, 1] + [len(self._action_dict) - 1] * k_recent + [1] * k_recent),
+                                       shape=(3 + k_recent * 2,), 
+                                       dtype=np.float32),
+            'solution': gym.spaces.Box(low=np.ones((self.problem.num_O * 2, 15)) * np.array([0] * 6 + [0] * 3 + [0] * 3 + [0] * 3), 
+                                       high=np.ones((self.problem.num_O * 2, 15)) * np.array([1e3] * 6 + [1e4] * 3 + [1] * 3 + [1e2] * 3), 
+                                       shape=(self.problem.num_O * 2, 15),
+                                       dtype=np.float32)})
+        self.distance_rescale_factor = 1 / 1000 if distance_type == 'EXACT_2D' else 1
+        self._random_actions = random_actions if random_actions is not None else ads.get_pdp_default_random_actions()
+    
+    def calc_features_of_solution(self, solution):
+        features = np.zeros((self.problem.num_O * 2, 15), dtype=np.float32)
+        for path_id, path in enumerate(solution):
+            n = len(path) - 1
+            cumcap = np.sum(path.capacities)
+            remain = path.capacity - cumcap 
+            for i in range(1, n):
+                node = path.get_by_seq_id(i)
+                _prev = node.prev_node if node.prev_node is not None else 0
+                _next = node.next_node if node.next_node is not None else 0
+                if _prev != 0:
+                    _prev_id, _prev_OD = _prev.node_id, _prev.OD_type 
+                else:
+                    _prev_id, _prev_OD = 0, 2
+                if _next != 0:
+                    _next_id, _next_OD = _next.node_id, _next.OD_type 
+                else:
+                    _next_id, _next_OD = 0, 2
+                # prev, node, next location, shape: (2*3,)
+                f1 = path.locations[[_prev_id, node.node_id, _next_id]].flatten()
+                # prev->node, node->next, prev->next distance, shape: (3,)
+                f2 = np.array([path.get_distance_by_node_ids(_prev_id, node.node_id), 
+                            path.get_distance_by_node_ids(node.node_id, _next_id),
+                            path.get_distance_by_node_ids(_prev_id, _next_id)])
+                f2 *= self.distance_rescale_factor
+                # prev, node, next OD type, shape: (3,)
+                f3 = np.array([_prev_OD, node.OD_type, _next_OD])
+                # node capacity, path remaining capacity and path index, shape: (3,)
+                f4 = np.array([self.problem.capacities[node.node_id], remain, path_id])
+                f4 /= self.problem.capacity
+                features[node.node_id - 1, :6] = f1
+                features[node.node_id - 1, 6:9] = f2
+                features[node.node_id - 1, 9:12] = f3 
+                features[node.node_id - 1, 12:15] = f4 
+        return features
+    
+    def _calc_reward(self, all_delta):
+        return -all_delta * self.distance_rescale_factor
+    
+    def _calc_infos(self, delta: float = 0., k_recent_action=None, k_recent_delta_sign=None):
+        infos = {}
+        infos['delta'] = delta * self.distance_rescale_factor 
+        infos['cost'] = self.problem.calc_cost(self.solution) * self.distance_rescale_factor
+        infos['no_improvement'] = self._no_improvement / self._max_no_improvement
+        infos['delta_best'] = (infos['cost'] - self.best_cost) * self.distance_rescale_factor
+        infos['k_recent_action'], infos['k_recent_delta_sign'] = k_recent_action, k_recent_delta_sign
+        return infos 

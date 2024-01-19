@@ -1,3 +1,4 @@
+import copy
 import numpy as np
 from ortools.linear_solver import pywraplp
 from ortools.constraint_solver import routing_enums_pb2
@@ -61,7 +62,8 @@ def ortools_formulation_2D(p, name: str = 'MultiOD'):
 def ortools_pd_formulation_2D(p, name: str = 'MultiOD'):
 
     p.convert_distance_matrix_to_int()
-    distance_matrix = np.delete(np.delete(p.distance_matrix, 1, axis=0), 1, axis=1).tolist()
+    # assume all vehicles depart from the same depot
+    distance_matrix = np.delete(np.delete(p.distance_matrix, slice(1, 1 + p.num_taxi), axis=0), slice(1, 1 + p.num_taxi), axis=1).tolist()
 
     # Create the routing index manager.
     manager = pywrapcp.RoutingIndexManager(len(distance_matrix),
@@ -94,12 +96,11 @@ def ortools_pd_formulation_2D(p, name: str = 'MultiOD'):
 
     # Define Transportation Requests.
     for O_index, D_index in p.OD_mapping.items():
-        pickup_index = manager.NodeToIndex(O_index - 1)
-        delivery_index = manager.NodeToIndex(D_index - 1)
+        pickup_index = manager.NodeToIndex(O_index - p.num_taxi)
+        delivery_index = manager.NodeToIndex(D_index - p.num_taxi)
         routing.AddPickupAndDelivery(pickup_index, delivery_index)
         routing.solver().Add(
-            routing.VehicleVar(pickup_index) == routing.VehicleVar(
-                delivery_index))
+            routing.VehicleVar(pickup_index) == routing.VehicleVar(delivery_index))
         routing.solver().Add(
             distance_dimension.CumulVar(pickup_index) <=
             distance_dimension.CumulVar(delivery_index))
@@ -110,6 +111,60 @@ def ortools_pd_formulation_2D(p, name: str = 'MultiOD'):
         routing_enums_pb2.FirstSolutionStrategy.PARALLEL_CHEAPEST_INSERTION)
     # 2 hours large instance comparison
     search_parameters.time_limit.seconds = 7200
+    # Solve the problem.
+    solution = routing.SolveWithParameters(search_parameters)
+
+    return p, manager, routing, solution
+
+
+def ortools_pdp_formulation(p, name: str = 'PDP'):
+    # assume all vehicles depart from the same depot
+    distance_matrix = p.distance_matrix
+    capacities = p.capacities
+
+    # Create the routing index manager.
+    manager = pywrapcp.RoutingIndexManager(len(distance_matrix),
+                                           p.num_taxi,
+                                           0)
+
+    # Create Routing Model.
+    routing = pywrapcp.RoutingModel(manager)
+
+    # Define cost of each arc.
+    def distance_callback(from_index, to_index):
+        """Returns the manhattan distance between the two nodes."""
+        # Convert from routing variable Index to distance matrix NodeIndex.
+        from_node = manager.IndexToNode(from_index)
+        to_node = manager.IndexToNode(to_index)
+        return distance_matrix[from_node][to_node]
+    
+    # capacity 
+    def capacity_callback(index):
+        node = manager.IndexToNode(index)
+        return capacities[node]
+
+    transit_callback_index = routing.RegisterTransitCallback(distance_callback)
+    routing.SetArcCostEvaluatorOfAllVehicles(transit_callback_index)
+    capacity_callback_index = routing.RegisterUnaryTransitCallback(capacity_callback)
+    routing.AddDimensionWithVehicleCapacity(
+        capacity_callback_index,
+        0,  # null capacity slack
+        [p.capacity] * p.num_taxi, 
+        True,  # start cumul to zero
+        'Capacity'
+    )
+
+    # Define Transportation Requests.
+    for O_index, D_index in p.OD_mapping.items():
+        pickup_index = manager.NodeToIndex(O_index)
+        delivery_index = manager.NodeToIndex(D_index)
+        routing.AddPickupAndDelivery(pickup_index, delivery_index)
+
+    # Setting first solution heuristic.
+    search_parameters = pywrapcp.DefaultRoutingSearchParameters()
+    search_parameters.first_solution_strategy = (
+        routing_enums_pb2.FirstSolutionStrategy.PARALLEL_CHEAPEST_INSERTION)
+
     # Solve the problem.
     solution = routing.SolveWithParameters(search_parameters)
 

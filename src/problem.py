@@ -11,8 +11,6 @@ from src import types
 
 
 MultiODSolution = solution.MultiODSolution
-random_split_dict = utils.random_split_dict
-generate_random_list_from_dict_with_key_before_value = utils.generate_random_list_from_dict_with_key_before_value
 
 
 class Problem:
@@ -67,6 +65,7 @@ class MultiODProblem(Problem):
                  ignore_from_dummy_cost: bool = True, ignore_to_dummy_cost: bool = True):
         self.distance_matrix, self.O, self.D, self.locations, self.node_index = self.generate_problem(num_O=num_O, num_taxi=num_taxi, locations=locations, seed=seed, ignore_from_dummy_cost=ignore_from_dummy_cost, ignore_to_dummy_cost=ignore_to_dummy_cost)
         self.OD_mapping = self.generate_OD_mapping(self.O, self.D)
+        self.contains_taxi_node = True 
     
     def generate_problem(self, num_O: int = 10, num_taxi: int = 1, locations: dict = None, seed: int = 0,
                          ignore_from_dummy_cost: bool = True, ignore_to_dummy_cost: bool = True):
@@ -178,10 +177,10 @@ class MultiODProblem(Problem):
     
     def generate_feasible_solution(self, *args):
         """Generates a random feasible solution(for subsequent optimization)"""
-        ODs = random_split_dict(self.OD_mapping, self.num_taxi)
+        ODs = utils.random_split_dict(self.OD_mapping, self.num_taxi)
         taxi_ids = [*range(1, 1 + self.num_taxi)]
         random.shuffle(taxi_ids)
-        paths = [[0, taxi_ids[i]] + generate_random_list_from_dict_with_key_before_value(OD, OD.keys()) + [0] for i, OD in enumerate(ODs)]
+        paths = [[0, taxi_ids[i]] + utils.generate_random_list_from_dict_with_key_before_value(OD, OD.keys()) + [0] for i, OD in enumerate(ODs)]
         sol = solution.MultiODSolution(paths, self)
         if self.is_feasible(sol):
             return sol 
@@ -255,6 +254,7 @@ class MultiODProblemV2(Problem):
         self.total_num_points = total_num_points
         locs = copy.deepcopy(_locations)
         node_index = [*range(len(locs))]
+
         # >=py38 feature
         O = node_index[(_O_start_index := 1): (_D_start_index := _O_start_index + num_O)]
         D = node_index[_D_start_index: _D_start_index + num_O]
@@ -265,7 +265,7 @@ class MultiODProblemV2(Problem):
             distance_matrix[0, :] = 0
         if ignore_to_dummy_cost:
             distance_matrix[:, 0] = 0
-        
+
         if int_distance:
             distance_matrix = distance_matrix.astype(int)
 
@@ -310,3 +310,135 @@ class MultiODProblemV2(Problem):
     @property
     def info(self):
         return self._info
+    
+            
+class PDP(MultiODProblem):
+    def __init__(
+        self, 
+        num_O: int = 10, 
+        num_taxi: int = 1, 
+        locations: dict = None, 
+        capacity: int = None,
+        capacities: dict = None,
+        capacity_slack: float = .2,
+        distance_type: str = 'EXACT_2D',
+        seed: int = 0, 
+        ignore_from_dummy_cost: bool = True, 
+        ignore_to_dummy_cost: bool = True
+    ):
+        self.generate_problem(num_O=num_O, num_taxi=num_taxi, locations=locations, capacity=capacity, capacities=capacities, capacity_slack=capacity_slack, distance_type=distance_type, seed=seed, ignore_from_dummy_cost=ignore_from_dummy_cost, ignore_to_dummy_cost=ignore_to_dummy_cost)
+        self.OD_mapping = self.generate_OD_mapping(self.O, self.D)
+        self.contains_taxi_node = False 
+    
+    def generate_problem(
+        self, 
+        num_O: int = 10, 
+        num_taxi: int = 1, 
+        locations: dict = None, 
+        capacity: int = None,
+        capacities: dict = None,
+        capacity_slack: float = .2,
+        distance_type: str = 'EXACT_2D',
+        seed: int = 0,
+        ignore_from_dummy_cost: bool = True,
+        ignore_to_dummy_cost: bool = True
+    ):
+        np.random.seed(seed)
+        random.seed(seed)
+
+        if locations is not None:
+            num_O = len(locations['O'])
+            total_num_points = len(locations['O']) + len(locations['D'])
+            total_num_points += 1  # depot
+            
+            _locations = []
+            _locations.append(locations['depot'] if 'depot' in locations else [0,0])
+            _locations.append(locations['O'])
+            _locations.append(locations['D'])
+            _locations = np.vstack(_locations)
+        else:
+            total_num_points = num_O * 2 + 1  # 1 for the depot
+            _locations = np.random.uniform(size=(total_num_points, 2))  # (x,y)
+
+        self.num_O = num_O
+        self.num_taxi = num_taxi
+        self.total_num_points = total_num_points
+        locs = copy.deepcopy(_locations)
+        node_index = [*range(len(locs))]
+
+        if capacities is not None:
+            self.capacities = capacities
+            self.capacity = (sum(capacities.values()) * (1 + capacity_slack) // num_taxi) + 1 if capacity is None else capacity
+        else:
+            max_capacity = capacity if capacity is not None else len(node_index)
+            _pos_capacities = np.random.randint(max_capacity, size=self.num_O)
+            _neg__capacities = np.zeros_like(_pos_capacities)
+            _capacities = np.concatenate(([0], _pos_capacities, _neg__capacities))
+            self.capacities = {i: c for i, c in enumerate(_capacities)}
+            self.capacity = (np.sum(_capacities) * (1 + capacity_slack) // num_taxi) + 1
+        
+        # >=py38 feature
+        O = node_index[(_O_start_index := 1): (_D_start_index := _O_start_index + num_O)]
+        D = node_index[_D_start_index: _D_start_index + num_O]
+        edge_index = np.array([*zip(*product(node_index, node_index))])
+        distance_matrix = np.linalg.norm(locs[edge_index[0]] - locs[edge_index[1]],
+                                              ord=2, axis=1).reshape(len(node_index), len(node_index))
+        if ignore_from_dummy_cost:
+            distance_matrix[0, :] = 0
+        if ignore_to_dummy_cost:
+            distance_matrix[:, 0] = 0
+        
+        if distance_type == 'EXACT_2D':
+            distance_matrix = np.round(distance_matrix * 1000)
+
+        self.O = O
+        self.D = D
+        self.locations = locs 
+        self.distance_matrix = distance_matrix
+        self.node_index = node_index
+        self.distance_type = distance_type
+
+    def generate_feasible_solution(self, *args):
+        """Generates a random feasible solution(for subsequent optimization)"""
+        ODs = utils.random_split_dict_with_capacity(self.OD_mapping, self.num_taxi, self.capacities, self.capacity)
+        paths = [[0] + utils.generate_random_list_from_dict_with_key_before_value(OD, OD.keys()) + [0] for i, OD in enumerate(ODs)]
+        sol = solution.MultiODSolution(paths, self)
+        if self.is_feasible(sol):
+            return sol 
+        
+    def is_feasible(self, solution: solution.MultiODSolution):
+        """This function checks whether a solution is feasible to the problem instance.
+        
+        Parameters
+        ------
+        solution: Solution, 
+
+        Returns
+        ------
+        feasible: bool
+        """
+        if not isinstance(solution, MultiODSolution):
+            solution = MultiODSolution(solution, self)
+        feasible = solution._is_valid
+        if not feasible: return False  
+        
+        for path in solution:
+             
+             for node in path:
+                # constraint 1: the OD pair should appear in the same path
+                if node in self.OD_mapping and self.OD_mapping[node] not in path:
+             
+                    solution.set_is_valid(False, self)  
+                    return False   
+                # constraint 2: O should appear before D
+                if node in self.OD_mapping and path.indexof(node) >= path.indexof(self.OD_mapping[node]):
+                    
+             
+                    solution.set_is_valid(False, self)
+                    return False 
+            # constraint 3: within capacity constraint
+             if not max(np.cumsum(path.capacities)) <= path.capacity:
+             
+                return False 
+             
+        return True

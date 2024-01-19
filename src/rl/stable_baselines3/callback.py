@@ -32,7 +32,14 @@ class SaveBestSolCallback(BaseCallback):
     early_stop: bool, if a solution reaches the same cost as target cost, then the training will stop.
 
     """
-    def __init__(self, log_dir: str, instance_name: str, verbose: int = 0, target_cost: float = None, target_tour: MultiODSolution = None, early_stop: bool = True):
+    def __init__(self, 
+                 log_dir: str, 
+                 instance_name: str, 
+                 verbose: int = 0, 
+                 target_cost: float = None, 
+                 target_tour: MultiODSolution = None, 
+                 early_stop: bool = True,
+                 distance_type: str = 'EUC_2D'):
         super().__init__(verbose=verbose)
         self.cur_best_cost = np.inf 
         self.cur_best_sol = None
@@ -45,6 +52,10 @@ class SaveBestSolCallback(BaseCallback):
         self.target_cost = target_cost
         self.target_tour = target_tour
         self.early_stop = early_stop
+        if distance_type == 'EXACT_2D':
+            self.rescale_factor = 1 / 1000
+        elif distance_type == 'EUC_2D':
+            self.rescale_factor = 1
 
     def _init_callback(self):
         os.makedirs(self.log_dir, exist_ok=True)
@@ -57,7 +68,7 @@ class SaveBestSolCallback(BaseCallback):
             self.logger.record('target/target_tour', Figure(target_figure, close=True), exclude=('stdout', 'log', 'json', 'csv'))
             plt.close()
             if self.target_cost is None:
-                self.target_cost = int(_problem.calc_cost(self.target_tour))
+                self.target_cost = int(_problem.calc_cost(self.target_tour)) * self.rescale_factor
             self.logger.record('target/target_cost', self.target_cost)
         if self.verbose >= 1 and self.target_cost is not None:
             print(f'Target cost: {self.target_cost}')
@@ -91,7 +102,8 @@ class SaveBestSolCallback(BaseCallback):
             best_sol_at_step = self.training_env.get_attr('best_sol_at_step')[best_cost_index]
             self.rollout_best_sol_at_step = best_sol_at_step
             self.rollout_found_time = found_time
-        if self.target_cost is not None and self.early_stop and best_cost <= self.target_cost:
+        _max_time_length = self.training_env.get_attr('_max_time_length')[0]
+        if (self.target_cost is not None and self.early_stop and best_cost <= self.target_cost) or (_max_time_length < time.time() - self.start_time):
             self.rollout_end_and_early_stop_logger()
             self.logger.dump(self.num_timesteps)
             return False 

@@ -50,7 +50,6 @@ def display_ortools_result(X, solver, problem,
         raise NotImplementedError
     return fig
 
-
 def display_pd_ortools_result(problem, solv):
     """Returns solution as a formatted string."""
     manager = solv[1]
@@ -67,19 +66,52 @@ def display_pd_ortools_result(problem, solv):
         plan_output = 'Route for vehicle {}:\n'.format(vehicle_id)
         route_distance = 0
         while not routing.IsEnd(index):
-            _node = manager.IndexToNode(index) + 1
+            _node = manager.IndexToNode(index)
+            _node += (problem.num_taxi)
             path.append(_node)
             plan_output += ' {} -> '.format(_node)
             previous_index = index
             index = solution.Value(routing.NextVar(index))
             route_distance += routing.GetArcCostForVehicle(previous_index, index, vehicle_id)
-        _node = manager.IndexToNode(index) + 1
+        _node = manager.IndexToNode(index)
+        _node += (problem.num_taxi)
         path.append(_node)
         path = [0] + path[:-1] + [0]
         plan_output += '{}\n'.format(_node)
         result_string += plan_output + '\n'
         total_distance += route_distance
-    paths.append(path)
+        paths.append(path)
     return result_string, total_distance, paths
 
+def display_pdp_ortools_result(problem, manager, routing, solution):
+    """Returns solution as a formatted string."""
+    
+    result_string = ''
 
+    result_string += f'Objective: {solution.ObjectiveValue() / 1000 if problem.distance_type == "EXACT_2D" else solution.ObjectiveValue()}\n'
+    total_distance = 0
+    paths = []
+    for vehicle_id in range(problem.num_taxi):
+        index = routing.Start(vehicle_id)
+        path = []
+        loads = []
+        load = 0
+        plan_output = 'Route for vehicle {}:\n'.format(vehicle_id)
+        route_distance = 0
+        while not routing.IsEnd(index):
+            _node = manager.IndexToNode(index)
+            path.append(_node)
+            load += problem.capacities[_node]
+            loads.append(load)
+            plan_output += ' {} -> '.format(_node)
+            previous_index = index
+            index = solution.Value(routing.NextVar(index))
+            route_distance += routing.GetArcCostForVehicle(previous_index, index, vehicle_id)
+        _node = manager.IndexToNode(index)
+        path.append(_node)
+        plan_output += '{}\n'.format(_node)
+        plan_output += f'max load: {max(loads)}'
+        result_string += plan_output + '\n'
+        total_distance += route_distance
+        paths.append(path) 
+    return result_string, total_distance, paths

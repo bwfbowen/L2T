@@ -64,15 +64,20 @@ class TwoOptOperator(Operator):
         
 
 class SegmentTwoOptOperator(Operator):
-    def __init__(self):
+    def __init__(self, include_taxi_node: bool = True):
         super().__init__(operator_type='path')
+        self.include_taxi_node = include_taxi_node
+        if self.include_taxi_node:
+            self._start = 2
+        else:
+            self._start = 1
     
     def __call__(self, solution: MultiODSolution, path_id: int = 0, min_delta=-EPSILON):
         path: MultiODPath = solution.paths[path_id]
         n = len(path) - 1
-
-        segment_starts, temp_Ds = SliceableDeque([2]), set([path.OD_mapping[path.get_by_seq_id(2).node_id]])
-        for seq_id in range(3, n):
+        _start = self._start
+        segment_starts, temp_Ds = SliceableDeque([_start]), set([path.OD_mapping[path.get_by_seq_id(_start).node_id]])
+        for seq_id in range(_start + 1, n):
             node_id = path.get_by_seq_id(seq_id).node_id
             if node_id in path.OD_mapping:
                 temp_Ds.add(path.OD_mapping[node_id])
@@ -86,7 +91,7 @@ class SegmentTwoOptOperator(Operator):
             start, end = segment_starts[i], segment_starts[i + 1]
             for first in range(start, end - 1):
                 node1 = path.get_by_seq_id(first)
-                prev1 = node1.prev_node.node_id 
+                prev1 = node1.prev_node.node_id if node1.prev_node is not None else 0
                 for second in range(first + 1, end):
                     node2 = path.get_by_seq_id(second)
                     next2 = node2.next_node.node_id if node2.next_node is not None else 0
@@ -161,15 +166,21 @@ class SegmentTwoOptOperatorV2(Operator):
         
 
 class TwoKOptOperator(Operator):
-    def __init__(self):
+    def __init__(self, include_taxi_node: bool = True):
         super().__init__(operator_type='path')
+        self.include_taxi_node = include_taxi_node
+        if self.include_taxi_node:
+            self._start = 2
+        else:
+            self._start = 1
     
     def __call__(self, solution: MultiODSolution, path_id: int = 0, min_delta=-EPSILON):
         path: MultiODPath = solution.paths[path_id]
         n = len(path) - 1
         F, R = np.zeros((n + 1, n + 1)), np.zeros((n + 1, n + 1))
         F_label, R_label = defaultdict(list), defaultdict(list)
-        for seq_id1 in range(n - 1, 2, -1):
+        _start = self._start
+        for seq_id1 in range(n - 1, _start, -1):
             node1: Node = path.get_by_seq_id(seq_id1)
             next1 = node1.next_node.node_id if node1.next_node is not None else 0 
             for seq_id2 in range(seq_id1 + 1, n):
@@ -303,14 +314,20 @@ class TwoKOptOperatorV2(Operator):
 
 
 class ExchangeOperator(Operator):
-    def __init__(self):
+    def __init__(self, include_taxi_node: bool = True):
         super().__init__(operator_type='path')
+        self.include_taxi_node = include_taxi_node
+        if self.include_taxi_node:
+            self._start = 2
+        else:
+            self._start = 1
     
     def __call__(self, solution: MultiODSolution, path_id: int = 0, min_delta=-EPSILON):
         path: MultiODPath = solution.paths[path_id]
         n = len(path) - 1
         label = None
-        for first in range(2, n - 1):
+        _start = self._start
+        for first in range(_start, n - 1):
             node1: Node = path.get_by_seq_id(first)
             od1 = node1.OD_type
             if od1 == 0:
@@ -334,7 +351,7 @@ class ExchangeOperator(Operator):
             od2 = node2.OD_type
             if od2 == 1 and (o2 := path.get_by_node_id(path.DO_mapping[node2.node_id])).seq_id > node1.seq_id:
                 continue  
-            prev1 = node1.prev_node.node_id
+            prev1 = node1.prev_node.node_id if node1.prev_node is not None else 0
             next1 = node1.next_node.node_id
             prev2 = node2.prev_node.node_id
             next2 = node2.next_node.node_id if node2.next_node is not None else 0
@@ -435,19 +452,25 @@ class ExchangeOperatorV2(Operator):
     
 
 class InsertOperator(Operator):
-    def __init__(self):
+    def __init__(self, include_taxi_node: bool = True):
         super().__init__(operator_type='path')
-    
+        self.include_taxi_node = include_taxi_node 
+        if self.include_taxi_node:
+            self._start = 2
+        else:
+            self._start = 1
+
     def __call__(self, solution: MultiODSolution, path_id: int = 0, min_delta=-EPSILON):
         path: MultiODPath = solution.paths[path_id]
         n = len(path) - 1
         label = None
-        for first in range(2, n):
+        _start = self._start
+        for first in range(_start, n):
             node1: Node = path.get_by_seq_id(first)
             od1 = node1.OD_type
             if od1 == 0:
                 d: Node = path.get_by_node_id(path.OD_mapping[node1.node_id])
-                inner_min_delta, inner_label = self._inner_loop(first, node1, path, 2, d.seq_id, min_delta)
+                inner_min_delta, inner_label = self._inner_loop(first, node1, path, _start, d.seq_id, min_delta)
             else:
                 o: Node = path.get_by_node_id(path.DO_mapping[node1.node_id])
                 inner_min_delta, inner_label = self._inner_loop(first, node1, path, o.seq_id + 1, n, min_delta)
@@ -464,9 +487,9 @@ class InsertOperator(Operator):
         label, delta = None, 0.
         for second in range(start, end):
             node2: Node = path.get_by_seq_id(second)
-            prev1 = node1.prev_node.node_id
+            prev1 = node1.prev_node.node_id if node1.prev_node is not None else 0
             next1 = node1.next_node.node_id if node1.next_node is not None else 0
-            prev2 = node2.prev_node.node_id
+            prev2 = node2.prev_node.node_id if node2.prev_node is not None else 0
             next2 = node2.next_node.node_id if node2.next_node is not None else 0
             if first < second:
                 before = (
@@ -565,17 +588,23 @@ class InsertOperatorV2(Operator):
             
 
 class OForwardOperator(Operator):
-    def __init__(self, length: int = 1):
+    def __init__(self, length: int = 1, include_taxi_node: bool = True):
         super().__init__(operator_type='path')
         self.length = length
+        self.include_taxi_node = include_taxi_node 
+        if self.include_taxi_node:
+            self._start = 2
+        else:
+            self._start = 1
     
     def __call__(self, solution: MultiODSolution, path_id: int = 0, min_delta=-EPSILON):
         path: MultiODPath = solution.paths[path_id]
         label = None
+        _start = self._start
         for O_block_id in path.O_blocks:
             for in_block_seq_id in range(len(path.block_dict[O_block_id]) - self.length + 1):
                 node1, node1_tail = path.block_dict[O_block_id][in_block_seq_id], path.block_dict[O_block_id][in_block_seq_id + self.length - 1]
-                inner_min_delta, inner_label = self._inner_loop(node1, node1_tail, path, 2, node1.seq_id, min_delta)
+                inner_min_delta, inner_label = self._inner_loop(node1, node1_tail, path, _start, node1.seq_id, min_delta)
                 if inner_min_delta < min_delta:
                     min_delta = inner_min_delta
                     label = inner_label
@@ -593,9 +622,9 @@ class OForwardOperator(Operator):
         label, delta = None, 0.
         for second in range(start, end):
             node2: Node = path.get_by_seq_id(second)
-            prev1 = node1.prev_node.node_id
+            prev1 = node1.prev_node.node_id if node1.prev_node is not None else 0
             next1_tail = node1_tail.next_node.node_id if node1_tail.next_node is not None else 0
-            prev2 = node2.prev_node.node_id
+            prev2 = node2.prev_node.node_id if node2.prev_node is not None else 0
             before = (
                 path.get_distance_by_node_ids(prev1, node1.node_id)
                 + path.get_distance_by_node_ids(node1_tail.node_id, next1_tail)
@@ -664,9 +693,14 @@ class DBackwardOperator(Operator):
 
 
 class RandomOForwardOperator(Operator):
-    def __init__(self, change_percentage: Union[int, float] = 0.1):
+    def __init__(self, change_percentage: Union[int, float] = 0.1, include_taxi_node: bool = True):
         super().__init__(operator_type='path-random')
         self.change = change_percentage 
+        self.include_taxi_node = include_taxi_node 
+        if self.include_taxi_node:
+            self._start = 2
+        else:
+            self._start = 1
 
     def __call__(self, solution: MultiODSolution, path_id: int = 0, min_delta=-EPSILON):
         path: MultiODPath = solution.paths[path_id]
@@ -679,10 +713,11 @@ class RandomOForwardOperator(Operator):
         selected = O_list[:num_Os]
 
         delta = 0.
+        _start = self._start
         for node_id in selected:
             node = path.get_by_node_id(node_id)
             d = path.get_by_node_id(path.OD_mapping[node.node_id])
-            target_seq_id = random.randint(2, d.seq_id - 1)
+            target_seq_id = random.randint(_start, d.seq_id - 1)
             inner_delta = self.compute_delta(node, target_seq_id, path)
             delta += inner_delta
             improved_path = solution.insert_within_path(node_id, target_seq_id, path=path) # Path modified in-place
@@ -691,9 +726,9 @@ class RandomOForwardOperator(Operator):
 
     def compute_delta(self, node1: Node, target_seq_id: int, path: MultiODPath):
         node2: Node = path.get_by_seq_id(target_seq_id)
-        prev1 = node1.prev_node.node_id
+        prev1 = node1.prev_node.node_id if node1.prev_node is not None else 0
         next1 = node1.next_node.node_id if node1.next_node is not None else 0
-        prev2 = node2.prev_node.node_id
+        prev2 = node2.prev_node.node_id if node2.prev_node is not None else 0
         before = (
             path.get_distance_by_node_ids(prev1, node1.node_id)
             + path.get_distance_by_node_ids(node1.node_id, next1)
@@ -773,7 +808,6 @@ class ODPairsExchangeOperator(Operator):
         if label is None:
             return None, None, None
         else:
-            
             improved_path = solution.exchange_nodes_within_path(label[0], label[1], path_id, path)
             improved_path = solution.exchange_nodes_within_path(path.OD_mapping[label[0]], path.OD_mapping[label[1]], path_id, improved_path)
             return improved_path, min_delta, label
@@ -800,7 +834,8 @@ class RandomODPairsExchangeOperator(Operator):
         if num_Os % 2 != 0:
             num_Os -= 1
         selected = O_list[:num_Os]
-        
+        if len(selected) < 2:
+            return None, 0., False
         delta = 0.
         # pairwise exchange
         for i in range(0, len(selected), 2):
@@ -820,6 +855,7 @@ class SameBlockExchangeOperator(Operator):
         path: MultiODPath = solution.paths[path_id]
         block = path.get_by_block_id(block_id)
         n = len(block)
+        if n < 1: return None, None, None 
         label = None
         head, tail = block[0], block[-1]
         pb = head.prev_node.node_id if head.prev_node is not None else 0
@@ -857,11 +893,11 @@ class MixedBlockExchangeOperator(Operator):
     def __call__(self, solution: MultiODSolution, path_id: int = 0, min_delta=-EPSILON):
         path: MultiODPath = solution.paths[path_id]
         label = None
-        
+        # print(path.block_dict)
         for O_id in path.O_blocks:
             for D_id in path.D_blocks:
                 O, D = path.block_dict[O_id], path.block_dict[D_id]
-                if not O[0].seq_id > D[0].seq_id: continue
+                if len(O) < 1 or len(D) < 1 or not O[0].seq_id > D[0].seq_id: continue
                 dp, dn = D[0].prev_node.node_id, D[-1].next_node.node_id
                 op, on = O[0].prev_node.node_id, O[-1].next_node.node_id
                 if dn == O[0].node_id:
@@ -1002,7 +1038,138 @@ class RandomMixedBlockExchangeOperator(Operator):
             improved_path = solution.exchange_blocks_within_path(block_id, D_id, path=improved_path)
         
         return improved_path, delta, True
+    
 
+class ODPairsExchangeMultiVehicles(Operator):
+    def __init__(self):
+        super().__init__(operator_type='multi-paths')
+    
+    def __call__(self, solution: MultiODSolution, path_id1: int = 0, path_id2: int = 0, min_delta=-EPSILON):
+        path1: MultiODPath = solution.paths[path_id1]
+        path2: MultiODPath = solution.paths[path_id2]
+        cumcap1 = np.sum(path1.capacities)
+        cumcap2 = np.sum(path2.capacities)
+        O1s = path1.OD_mapping.keys()
+        O2s = path2.OD_mapping.keys()
+        
+        label = None
+        for o1_id in O1s:
+            for o2_id in O2s:
+                o1: Node = path1.get_by_node_id(o1_id)
+                d1: Node = path1.get_by_node_id(path1.OD_mapping[o1_id])
+                o2: Node = path2.get_by_node_id(o2_id)
+                d2: Node = path2.get_by_node_id(path2.OD_mapping[o2_id])
+                # Check capacity
+                _item_cap1, _item_cap2 = path1.capacities[o1.seq_id] + path1.capacities[d1.seq_id], path2.capacities[o2.seq_id] + path2.capacities[d2.seq_id]
+                cap_diff = _item_cap1 - _item_cap2
+                if cumcap1 - cap_diff <= path1.capacity and cumcap2 + cap_diff <= path2.capacity:
+                    delta, inner_label = self.compute_delta(o1, o2, d1, d2, path1, path2)
+                    if delta <= min_delta:
+                        label = inner_label
+                        min_delta = delta  
+                else:
+                    continue
+        
+        if label is None:
+            return None, None, None 
+        else:
+            # print(label, path_id1, path_id2)
+            o_pair, d_pair = label
+            improved_path1, improved_path2 = solution.exchange_od_pair_across_paths(o_pair[0], o_pair[1], d_pair[0], d_pair[1], path1=path1, path2=path2)
+            improved_paths = (improved_path1, improved_path2)
+            return improved_paths, min_delta, label
+    
+    def compute_delta(self, o1: Node, o2: Node, d1: Node, d2: Node, path1: MultiODPath, path2: MultiODPath):
+        delta, label = _compute_delta_pair_exchange_across_paths(o1, o2, d1, d2, path1, path2)
+        return delta, label
+
+
+class ODPairsInsertMultiVehicles(Operator):
+    def __init__(self, include_taxi_node: bool = False):
+        super().__init__(operator_type='multi-paths')
+        self.include_taxi_node = include_taxi_node 
+        if self.include_taxi_node:
+            self._start = 2
+        else:
+            self._start = 1
+
+    def __call__(self, solution: MultiODSolution, path_id1: int = 0, path_id2: int = 0, min_delta=-EPSILON):
+        path1: MultiODPath = solution.paths[path_id1]
+        path2: MultiODPath = solution.paths[path_id2]
+        cumcap2 = np.sum(path2.capacities)
+        cap_left = path2.capacity - cumcap2 
+        end = len(path2)
+        O1s = path1.OD_mapping.keys()
+        label = None
+        for o1_id in O1s:
+            o1: Node = path1.get_by_node_id(o1_id)
+            d1: Node = path1.get_by_node_id(path1.OD_mapping[o1_id])
+            _item_cap = path1.capacities[o1.seq_id] + path1.capacities[d1.seq_id]
+            if _item_cap <= cap_left:
+                for t1 in range(self._start, end):  #
+                    for t2 in range(t1, end):
+                        inner_delta = self._compute_delta(o1, d1, t1, t2, path1, path2)
+                        if inner_delta <= min_delta:
+                            min_delta = inner_delta
+                            label = [o1_id, t1, t2]
+        
+        if label is None:
+            return None, None, None 
+        else:
+            # print(label, path_id1, path_id2)
+            o_id, t1, t2 = label 
+            improved_path1, improved_path2 = solution.insert_od_pair_across_paths(o_id, t1, t2, path1=path1, path2=path2)
+            improved_paths = (improved_path1, improved_path2)
+            return improved_paths, min_delta, label
+        
+    def _compute_delta(self, o: Node, d: Node, t1: int, t2: int, path1: MultiODPath, path2: MultiODPath):
+        delta = _compute_delta_pair_insert_across_paths(o=o, d=d, t1=t1, t2=t2, path1=path1, path2=path2) 
+        return delta 
+
+
+class RandomODPairsInsertMultiVehicles(Operator):
+    def __init__(self, change_percentage: Union[int, float] = 0.1, include_taxi_node: bool = False):
+        super().__init__(operator_type='path-random')
+        self.change = change_percentage
+        self.include_taxi_node = include_taxi_node 
+        if self.include_taxi_node:
+            self._start = 2
+        else:
+            self._start = 1
+    
+    def __call__(self, solution: MultiODSolution, path_id: int = 0, min_delta=-EPSILON):
+        path: MultiODPath = solution.paths[path_id]
+        O_list = list(path.OD_mapping.keys())
+        np.random.shuffle(O_list)
+        if type(self.change) is float:
+            num_Os = max(int(len(O_list)*self.change), 1)
+        else:
+            num_Os = max(self.change, 1)
+        selected = O_list[:num_Os] 
+        if not selected:
+            return None, 0., False
+        to_paths = [i for i in range(len(solution.paths)) if i != path_id]
+        to_paths = np.random.choice(to_paths, size=len(selected))
+
+        delta = 0.
+        for i in range(len(selected)):
+            o_id = selected[i]
+            o: Node = path.get_by_node_id(o_id)
+            d: Node = path.get_by_node_id(path.OD_mapping[o_id])
+            to_path = solution.paths[to_paths[i]]
+            end = len(to_path)
+            t1 = random.randint(self._start, end)
+            t2 = random.randint(t1, end)
+            inner_delta = self._compute_delta(o, d, t1, t2, path1=path, path2=to_path)
+            delta += inner_delta
+            # print(o_id, d.node_id, t1, t2, path_id, to_paths[i])
+            improved_path = solution.insert_od_pair_across_paths(o_id, t1, t2, path1=path, path2=to_path)
+        return improved_path, delta, True 
+    
+    def _compute_delta(self, o: Node, d: Node, t1: int, t2: int, path1: MultiODPath, path2: MultiODPath):
+        delta = _compute_delta_pair_insert_across_paths(o=o, d=d, t1=t1, t2=t2, path1=path1, path2=path2) 
+        return delta 
+    
 
 def _compute_delta_pair_exchange(o1: Node, o2: Node, path: MultiODPath):
     label, delta = None, 0.
@@ -1019,7 +1186,7 @@ def _compute_delta_pair_exchange(o1: Node, o2: Node, path: MultiODPath):
         d_f, d_s = d2, d1 
     else:
         d_f, d_s = d1, d2 
-    o_f_prev, o_f_next = o_f.prev_node.node_id, o_f.next_node.node_id
+    o_f_prev, o_f_next = o_f.prev_node.node_id if o_f.prev_node is not None else 0, o_f.next_node.node_id
     o_s_prev, o_s_next = o_s.prev_node.node_id, o_s.next_node.node_id 
     d_f_prev, d_f_next = d_f.prev_node.node_id, d_f.next_node.node_id
     d_s_prev, d_s_next = d_s.prev_node.node_id, d_s.next_node.node_id if d_s.next_node is not None else 0
@@ -1328,3 +1495,179 @@ def _compute_delta_pair_exchange(o1: Node, o2: Node, path: MultiODPath):
     delta = after - before
     label = o1.node_id, o2.node_id
     return delta, label
+
+
+def _compute_delta_pair_exchange_across_paths(o1: Node, o2: Node, d1: Node, d2: Node, path1: MultiODPath, path2: MultiODPath):
+    label, delta = None, 0.
+    prev_o1, next_o1 = o1.prev_node.node_id if o1.prev_node is not None else 0, o1.next_node.node_id
+    prev_d1, next_d1 = d1.prev_node.node_id, d1.next_node.node_id if d1.next_node is not None else 0
+    prev_o2, next_o2 = o2.prev_node.node_id if o2.prev_node is not None else 0, o2.next_node.node_id
+    prev_d2, next_d2 = d2.prev_node.node_id, d2.next_node.node_id if d2.next_node is not None else 0
+
+    od1_is_neighbor, od2_is_neighbor = o1.seq_id + 1 == d1.seq_id, o2.seq_id + 1 == d2.seq_id
+    # o1,d1; o2,d2
+    if od1_is_neighbor and od2_is_neighbor:
+        before = (
+            path1.get_distance_by_node_ids(prev_o1, o1.node_id)
+            + path1.get_distance_by_node_ids(d1.node_id, next_d1)
+            + path2.get_distance_by_node_ids(prev_o2, o2.node_id)
+            + path2.get_distance_by_node_ids(d2.node_id, next_d2)
+            )
+        after = (
+            path1.get_distance_by_node_ids(prev_o1, o2.node_id)
+            + path1.get_distance_by_node_ids(d2.node_id, next_d1)
+            + path2.get_distance_by_node_ids(prev_o2, o1.node_id)
+            + path2.get_distance_by_node_ids(d1.node_id, next_d2)
+        )
+    # o1,d1; o2,...,d2
+    elif od1_is_neighbor and not od2_is_neighbor:
+        before = (
+            path1.get_distance_by_node_ids(prev_o1, o1.node_id)
+            + path1.get_distance_by_node_ids(o1.node_id, d1.node_id)
+            + path1.get_distance_by_node_ids(d1.node_id, next_d1)
+            + path2.get_distance_by_node_ids(prev_o2, o2.node_id)
+            + path2.get_distance_by_node_ids(o2.node_id, next_o2)
+            + path2.get_distance_by_node_ids(prev_d2, d2.node_id)
+            + path2.get_distance_by_node_ids(d2.node_id, next_d2)
+        )
+        after = (
+            path1.get_distance_by_node_ids(prev_o1, o2.node_id)
+            + path1.get_distance_by_node_ids(o2.node_id, d2.node_id)
+            + path1.get_distance_by_node_ids(d2.node_id, next_d1)
+            + path2.get_distance_by_node_ids(prev_o2, o1.node_id)
+            + path2.get_distance_by_node_ids(next_o2, o1.node_id)
+            + path2.get_distance_by_node_ids(prev_d2, d1.node_id)
+            + path2.get_distance_by_node_ids(d1.node_id, next_d2)
+        )
+    # o1,...,d1; o2,d2
+    elif not od1_is_neighbor and od2_is_neighbor:
+        before = (
+            path1.get_distance_by_node_ids(prev_o1, o1.node_id)
+            + path1.get_distance_by_node_ids(o1.node_id, next_o1)
+            + path1.get_distance_by_node_ids(prev_d1, d1.node_id)
+            + path1.get_distance_by_node_ids(next_d1, d1.node_id)
+            + path2.get_distance_by_node_ids(prev_o2, o2.node_id)
+            + path2.get_distance_by_node_ids(o2.node_id, d2.node_id)
+            +path2.get_distance_by_node_ids(d2.node_id, next_d2)
+        )
+        after = (
+            path1.get_distance_by_node_ids(prev_o1, o2.node_id)
+            + path1.get_distance_by_node_ids(o2.node_id, next_o1)
+            + path1.get_distance_by_node_ids(prev_d1, d2.node_id)
+            + path1.get_distance_by_node_ids(next_d1, d2.node_id)
+            + path2.get_distance_by_node_ids(prev_o2, o1.node_id)
+            + path2.get_distance_by_node_ids(o1.node_id, d1.node_id)
+            + path2.get_distance_by_node_ids(d1.node_id, next_d2)
+        )
+    # o1,...,d1; o2,...,d2 
+    elif not od1_is_neighbor and not od2_is_neighbor:
+        before = (
+            path1.get_distance_by_node_ids(prev_o1, o1.node_id)
+            + path1.get_distance_by_node_ids(o1.node_id, next_o1)
+            + path1.get_distance_by_node_ids(prev_d1, d1.node_id)
+            + path1.get_distance_by_node_ids(next_d1, d1.node_id)
+            + path2.get_distance_by_node_ids(prev_o2, o2.node_id)
+            + path2.get_distance_by_node_ids(o2.node_id, next_o2)
+            + path2.get_distance_by_node_ids(prev_d2, d2.node_id)
+            + path2.get_distance_by_node_ids(d2.node_id, next_d2)
+        )
+        after = (
+            path1.get_distance_by_node_ids(prev_o1, o2.node_id)
+            + path1.get_distance_by_node_ids(o2.node_id, next_o1)
+            + path1.get_distance_by_node_ids(prev_d1, d2.node_id)
+            + path1.get_distance_by_node_ids(next_d1, d2.node_id)
+            + path2.get_distance_by_node_ids(prev_o2, o1.node_id)
+            + path2.get_distance_by_node_ids(o1.node_id, next_o2)
+            + path2.get_distance_by_node_ids(prev_d2, d1.node_id)
+            + path2.get_distance_by_node_ids(d1.node_id, next_d2)
+        )
+    
+    delta = after - before
+    label = [(o1.node_id, o2.node_id), (d1.node_id, d2.node_id)]
+    return delta, label
+
+
+def _compute_delta_pair_insert_across_paths(o: Node, d: Node, t1: int, t2: int, path1: MultiODPath, path2: MultiODPath):
+    prev_o, next_o = o.prev_node.node_id if o.prev_node is not None else 0, o.next_node.node_id
+    prev_d, next_d = d.prev_node.node_id, d.next_node.node_id if d.next_node is not None else 0
+    od_is_neighbor = o.seq_id + 1 == d.seq_id
+
+    # o,...,d; o,d
+    if not od_is_neighbor:
+        before1 = (
+            path1.get_distance_by_node_ids(prev_o, o.node_id)
+            + path1.get_distance_by_node_ids(o.node_id, next_o)
+            + path1.get_distance_by_node_ids(prev_d, d.node_id)
+            + path1.get_distance_by_node_ids(d.node_id, next_d)
+        )
+        after1 = (
+            path1.get_distance_by_node_ids(prev_o, next_o)
+            + path1.get_distance_by_node_ids(prev_d, next_d)
+        )
+    else:
+        before1 = (
+            path1.get_distance_by_node_ids(prev_o, o.node_id)
+            + path1.get_distance_by_node_ids(o.node_id, d.node_id)
+            + path1.get_distance_by_node_ids(d.node_id, next_d)
+        )
+        after1 = (
+            path1.get_distance_by_node_ids(prev_o, next_d)
+        )
+    # t1,t2/t1,...,t2; t1=t2; t1/t2>=len(path2)-1
+    if t1 < len(path2) - 1 and t2 < len(path2) - 1 and t1 != t2:
+        tn1: Node = path2.get_by_seq_id(t1)
+        tn2: Node = path2.get_by_seq_id(t2)
+        prev_t1 = tn1.prev_node.node_id if tn1.prev_node is not None else 0
+        prev_t2 = tn2.prev_node.node_id if tn2.prev_node is not None else 0
+        before2 = (
+            path2.get_distance_by_node_ids(tn1.node_id, prev_t1)
+            + path2.get_distance_by_node_ids(tn2.node_id, prev_t2)
+        )
+        after2 = (
+            path2.get_distance_by_node_ids(prev_t1, o.node_id)
+            + path2.get_distance_by_node_ids(o.node_id, tn1.node_id)
+            + path2.get_distance_by_node_ids(prev_t2, d.node_id)
+            + path2.get_distance_by_node_ids(d.node_id, tn2.node_id)
+        )
+    elif t1 < len(path2) - 1 and t2 < len(path2) - 1 and t1 == t2:
+        tn1: Node = path2.get_by_seq_id(t1)
+        prev_t1 = tn1.prev_node.node_id if tn1.prev_node is not None else 0
+        before2 = (
+            path2.get_distance_by_node_ids(prev_t1, tn1.node_id)
+        ) 
+        after2 = (
+            path2.get_distance_by_node_ids(prev_t1, o.node_id)
+            + path2.get_distance_by_node_ids(o.node_id, d.node_id)
+            + path2.get_distance_by_node_ids(d.node_id, tn1.node_id)
+        )
+    elif t1 < len(path2) - 1 and t2 >= len(path2) - 1:
+        tn1: Node = path2.get_by_seq_id(t1)
+        prev_t1 = tn1.prev_node.node_id if tn1.prev_node is not None else 0
+        tail2: Node = path2.get_by_seq_id(-1)
+        tail2 = tail2.node_id if tail2 is not None else 0
+        depot = 0
+        before2 = (
+            path2.get_distance_by_node_ids(tn1.node_id, prev_t1)
+            + path2.get_distance_by_node_ids(tail2, depot)
+        ) 
+        after2 = (
+            path2.get_distance_by_node_ids(prev_t1, o.node_id)
+            + path2.get_distance_by_node_ids(o.node_id, tn1.node_id)
+            + path2.get_distance_by_node_ids(tail2, d.node_id)
+            + path2.get_distance_by_node_ids(d.node_id, depot)
+        )
+    elif t1 >= len(path2) - 1:
+        tail2: Node = path2.get_by_seq_id(-1) 
+        tail2 = tail2.node_id if tail2 is not None else 0
+        depot = 0
+        before2 = (
+            path2.get_distance_by_node_ids(tail2, depot)
+        ) 
+        after2 = (
+            path2.get_distance_by_node_ids(tail2, o.node_id)
+            + path2.get_distance_by_node_ids(o.node_id, d.node_id)
+            + path2.get_distance_by_node_ids(d.node_id, depot)
+        )
+
+    delta = (after1 + after2) - (before1 + before2) 
+    return delta  
