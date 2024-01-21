@@ -1,7 +1,7 @@
 from typing import Union 
 import random
 import copy
-from collections import defaultdict
+from collections import defaultdict, deque
 import numpy as np
 
 from . import solution
@@ -155,8 +155,14 @@ class SegmentTwoOptOperatorV2(Operator):
                     if delta < min_delta:
                         min_delta = delta
                         label = first, second
+                        break
+                if label is not None:
+                    break 
+            if label is not None:
+                break 
+
         if label is None:
-            return None, None, None
+            return solution, None, None
         else:
             first, second = label[0], label[1]
             path[first: second + 1] = path[first: second + 1][::-1]
@@ -301,7 +307,7 @@ class TwoKOptOperatorV2(Operator):
         min_index = np.unravel_index(np.argmin(F, axis=None), F.shape)
         labels = F_label[min_index]
         if not labels:
-            return None, None, None 
+            return solution, None, None 
         else:
             min_delta = F[min_index]
             improved_path = path
@@ -405,14 +411,16 @@ class ExchangeOperatorV2(Operator):
             if inner_min_delta < min_delta:
                 min_delta = inner_min_delta
                 label = inner_label
+                break 
         if label is None:
-            return None, None, None
+            return solution, None, None
         else:
             improved_path = path
-            n1, n2 = improved_path[label[0]], improved_path[label[1]]
-            improved_path[label[0]], improved_path[label[1]] = n2, n1
-            info.sequence[n1] = types.SequenceInfo(sequence=path_id, index=label[1])
-            info.sequence[n2] = types.SequenceInfo(sequence=path_id, index=label[0])
+            n1, n2 = label 
+            n1_seq, n2_seq = info.sequence[n1].index, info.sequence[n2].index 
+            improved_path[n1_seq], improved_path[n2_seq] = n2, n1
+            info.sequence[n1] = types.SequenceInfo(sequence=path_id, index=n2_seq)
+            info.sequence[n2] = types.SequenceInfo(sequence=path_id, index=n1_seq)
             return solution, min_delta, label  
     
     def _inner_loop(self, first: int, node1: int, path: types.Path, info: types.ProblemInfo, start, end, min_delta=-EPSILON):
@@ -543,13 +551,14 @@ class InsertOperatorV2(Operator):
             if inner_min_delta < min_delta:
                 min_delta = inner_min_delta
                 label = inner_label
+                break 
         if label is None:
-            return None, None, None
+            return solution, None, None
         else:
             improved_path = path 
             node = improved_path.pop(label[0])
             improved_path.insert(label[1], node)
-            for seq_idx, n in improved_path:
+            for seq_idx, n in enumerate(improved_path):
                 info.sequence[n] = types.SequenceInfo(sequence=path_id, index=seq_idx)
             return solution, min_delta, label 
     
@@ -743,6 +752,57 @@ class RandomOForwardOperator(Operator):
         return delta
 
 
+class RandomOForwardOperatorV2(Operator):
+    def __init__(self, change_percentage: Union[int, float] = 0.1):
+        super().__init__(operator_type='path-random')
+        self.change = change_percentage 
+        self._start = 1
+
+    def __call__(self, solution: solution.MultiODSolutionV2, path_id: int = 0, min_delta=-EPSILON):
+        path: types.Path = solution.paths[path_id]
+        info = solution.info 
+        O_list = [k for k,v in info.od_type.items() if v == 0]
+        np.random.shuffle(O_list)
+        if type(self.change) == float:
+            num_Os = max(int(len(O_list)*self.change), 1)
+        elif type(self.change) == int:
+            num_Os = max(self.change, 1)
+        selected = O_list[:num_Os]
+
+        delta = 0.
+        _start = self._start
+        for node in selected:
+            d = info.od_pairing[node]
+            target_seq_id = random.randint(_start, info.sequence[d].index - 1)
+            inner_delta = self.compute_delta(node, target_seq_id, path, info)
+            delta += inner_delta
+
+            n = path.pop(info.sequence[node].index)
+            path.insert(target_seq_id, n)
+            for seq_idx, n in enumerate(path):
+                info.sequence[n] = types.SequenceInfo(sequence=path_id, index=seq_idx)
+        
+        return solution, delta, True
+
+    def compute_delta(self, node1: int, target_seq_id: int, path: types.Path, info: types.ProblemInfo):
+        node2: int = path[target_seq_id]
+        prev1 = path[info.sequence[node1].index - 1]
+        next1 = path[info.sequence[node1].index + 1]
+        prev2 = path[info.sequence[node2].index - 1]
+        before = (
+            info.distance_matrix[prev1, node1]
+            + info.distance_matrix[node1, next1]
+            + info.distance_matrix[prev2, node2]
+        )
+        after = (
+            info.distance_matrix[prev1, next1]
+            + info.distance_matrix[node1, node2]
+            + info.distance_matrix[node1, prev2]
+        )
+        delta = after - before
+        return delta
+
+
 class RandomDBackwardOperator(Operator):
     def __init__(self, change_percentage: Union[int, float] = 0.1):
         super().__init__(operator_type='path-random')
@@ -789,6 +849,56 @@ class RandomDBackwardOperator(Operator):
         return delta
 
 
+class RandomDBackwardOperatorV2(Operator):
+    def __init__(self, change_percentage: Union[int, float] = 0.1):
+        super().__init__(operator_type='path-random')
+        self.change = change_percentage
+    
+    def __call__(self, solution: solution.MultiODSolutionV2, path_id: int = 0, min_delta=-EPSILON):
+        path: types.Path = solution.paths[path_id]
+        info = solution.info
+        n = len(path) - 1
+        D_list = [k for k,v in info.od_type.items() if v == 1]
+        np.random.shuffle(D_list)
+        if type(self.change) is float:
+            num_Ds = max(int(len(D_list)*self.change), 1)
+        else:
+            num_Ds = max(self.change, 1)
+        selected = D_list[:num_Ds]
+
+        delta = 0.
+        for node in selected:
+            o = info.od_pairing[node]
+            target_seq_id = random.randint(info.sequence[o].index + 1, n - 1)
+            inner_delta = self.compute_delta(node, target_seq_id, path, info)
+            delta += inner_delta
+
+            n_ = path.pop(info.sequence[node].index)
+            path.insert(target_seq_id, n_)
+            for seq_idx, n_ in enumerate(path):
+                info.sequence[n_] = types.SequenceInfo(sequence=path_id, index=seq_idx)
+        
+        return solution, delta, True
+    
+    def compute_delta(self, node1: int, target_seq_id: int, path: types.Path, info: types.ProblemInfo):
+        node2: int = path[target_seq_id]
+        prev1 = path[info.sequence[node1].index - 1]
+        next1 = path[info.sequence[node1].index + 1]
+        next2 = path[info.sequence[node2].index + 1]
+        before = (
+            info.distance_matrix[prev1, node1]
+            + info.distance_matrix[node1, next1]
+            + info.distance_matrix[node2, next2]
+        )
+        after = (
+            info.distance_matrix[prev1, next1]
+            + info.distance_matrix[node1, node2]
+            + info.distance_matrix[node1, next2]
+        )
+        delta = after - before
+        return delta
+
+
 class ODPairsExchangeOperator(Operator):
     def __init__(self):
         super().__init__(operator_type='path')
@@ -814,6 +924,45 @@ class ODPairsExchangeOperator(Operator):
 
     def compute_delta(self, O1: Node, O2: Node, path: MultiODPath):
         delta, label = _compute_delta_pair_exchange(O1, O2, path)
+        return delta, label
+    
+
+class ODPairsExchangeOperatorV2(Operator):
+    def __init__(self):
+        super().__init__(operator_type='path')
+
+    def __call__(self, solution: solution.MultiODSolutionV2, path_id: int = 0, min_delta=-EPSILON):
+        path = solution.paths[path_id]
+        info = solution.info
+        label = None
+        O_list = [k for k, v in info.od_type.items() if v == 0]
+        for i in range(len(O_list)):
+            O1_id = O_list[i]
+            for j in range(i+1, len(O_list)):
+                O2_id = O_list[j]
+                inner_min_delta, inner_label = self.compute_delta(O1_id, O2_id, info, path)
+                if inner_min_delta < min_delta:
+                    min_delta = inner_min_delta
+                    label = inner_label
+                    break 
+        if label is None:
+            return solution, None, None
+        else:
+            improved_path = path 
+            o1, o2 = label
+            o1_seq, o2_seq = info.sequence[o1].index, info.sequence[o2].index
+            improved_path[o1_seq], improved_path[o2_seq] = o2, o1
+            info.sequence[o1] = types.SequenceInfo(sequence=path_id, index=o2_seq)
+            info.sequence[o2] = types.SequenceInfo(sequence=path_id, index=o1_seq)
+            d1, d2 = info.od_pairing[o1], info.od_pairing[o2]
+            d1_seq, d2_seq = info.sequence[d1].index, info.sequence[d2].index
+            improved_path[d1_seq], improved_path[d2_seq] = d2, d1
+            info.sequence[d1] = types.SequenceInfo(sequence=path_id, index=d2_seq)
+            info.sequence[d2] = types.SequenceInfo(sequence=path_id, index=d1_seq)
+            return solution, min_delta, label
+
+    def compute_delta(self, O1: int, O2: int, info: types.ProblemInfo, path: types.Path):
+        delta, label = _compute_delta_pair_exchange_v2(O1, O2, info, path)
         return delta, label
 
 
@@ -845,6 +994,46 @@ class RandomODPairsExchangeOperator(Operator):
             improved_path = solution.exchange_nodes_within_path(node1_id, node2_id, path_id, path) # Path modified in-place
             improved_path = solution.exchange_nodes_within_path(path.OD_mapping[node1_id], path.OD_mapping[node2_id], path_id, improved_path)
         return improved_path, delta, True
+    
+
+class RandomODPairsExchangeOperatorV2(Operator):
+    """"""
+    def __init__(self, change_percentage: Union[int, float] = 0.1):
+        super().__init__(operator_type='path-random')
+        self.change = change_percentage
+
+    def __call__(self, solution: solution.MultiODSolutionV2, path_id: int = 0, min_delta=-EPSILON):
+        path: types.Path = solution.paths[path_id]
+        info = solution.info
+        O_list = [k for k, v in info.od_type.items() if v == 0]
+        np.random.shuffle(O_list)
+        if type(self.change) is float:
+            num_Os = max(int(len(O_list)*self.change), 2)
+        else:
+            num_Os = max(self.change, 2)
+        if num_Os % 2 != 0:
+            num_Os -= 1
+        selected = O_list[:num_Os]
+        if len(selected) < 2:
+            return solution, 0., False
+        delta = 0.
+        # pairwise exchange
+        improved_path = path 
+        for i in range(0, len(selected), 2):
+            node1_id, node2_id = selected[i], selected[i + 1]
+            inner_delta, _ = _compute_delta_pair_exchange_v2(node1_id, node2_id, info, path)
+            delta += inner_delta
+            o1, o2 = node1_id, node2_id
+            o1_seq, o2_seq = info.sequence[o1].index, info.sequence[o2].index
+            improved_path[o1_seq], improved_path[o2_seq] = o2, o1
+            info.sequence[o1] = types.SequenceInfo(sequence=path_id, index=o2_seq)
+            info.sequence[o2] = types.SequenceInfo(sequence=path_id, index=o1_seq)
+            d1, d2 = info.od_pairing[o1], info.od_pairing[o2]
+            d1_seq, d2_seq = info.sequence[d1].index, info.sequence[d2].index
+            improved_path[d1_seq], improved_path[d2_seq] = d2, d1
+            info.sequence[d1] = types.SequenceInfo(sequence=path_id, index=d2_seq)
+            info.sequence[d2] = types.SequenceInfo(sequence=path_id, index=d1_seq)
+        return solution, delta, True    
     
 
 class SameBlockExchangeOperator(Operator):
@@ -935,6 +1124,88 @@ class MixedBlockExchangeOperator(Operator):
             improved_path = solution.exchange_blocks_within_path(block_id1, block_id2, path=path)
             return improved_path, min_delta, label
         
+
+class MixedBlockExchangeOperatorV2(Operator):
+    def __init__(self):
+        super().__init__(operator_type='path')
+    
+    def __call__(self, solution: solution.MultiODSolutionV2, path_id: int = 0, min_delta=-EPSILON):
+        path: types.Path = solution.paths[path_id]
+        info = solution.info
+        o_blocks, d_blocks = deque(), deque()
+        o_block, d_block = [], []
+        for seq_id, n in enumerate(path):
+            if info.od_type[n] == 0:
+                o_block.append(n)
+                if d_block:
+                    d_blocks.append(d_block)
+                    d_block = []
+            elif info.od_type[n] == 1:
+                d_block.append(n)
+                if o_block:
+                    o_blocks.append(o_block)
+                    o_block = []
+        if o_block:
+            o_blocks.append(o_block)
+        if d_block:
+            d_blocks.append(d_block)
+        label = None
+        
+        for o_block in o_blocks:
+            for d_block in d_blocks:
+                oh_seq, ot_seq = info.sequence[o_block[0]].index, info.sequence[o_block[-1]].index
+                dh_seq, dt_seq = info.sequence[d_block[0]].index, info.sequence[d_block[-1]].index 
+                if not oh_seq > dh_seq: continue
+                dp, dn = path[dh_seq - 1], path[dt_seq + 1]
+                op, on = path[oh_seq - 1], path[ot_seq + 1]
+                if dt_seq + 1 == oh_seq:
+                    before = (
+                        info.distance_matrix[dp, d_block[0]]
+                        + info.distance_matrix[d_block[-1], o_block[0]]
+                        + info.distance_matrix[o_block[-1], on]
+                    )
+                    after = (
+                        info.distance_matrix[dp, o_block[0]]
+                        + info.distance_matrix[o_block[-1], d_block[0]]
+                        + info.distance_matrix[d_block[-1], on]
+                    )
+                else:
+                    before = (
+                        info.distance_matrix[dp, d_block[0]]
+                        + info.distance_matrix[dn, d_block[-1]]
+                        + info.distance_matrix[op, o_block[0]]
+                        + info.distance_matrix[o_block[-1], on]
+                    )
+                    after = (
+                        info.distance_matrix[dp, o_block[0]]
+                        + info.distance_matrix[dn, o_block[-1]]
+                        + info.distance_matrix[op, d_block[0]]
+                        + info.distance_matrix[d_block[-1], on]
+                    )
+                inner_min_delta = after - before 
+                if inner_min_delta < min_delta:
+                    min_delta = inner_min_delta
+                    label = [o_block, d_block]
+                    break 
+            if label is not None:
+                break 
+        if label is None:
+            return solution, None, None
+        else:
+            o_block, d_block = label
+            # d block is ahead of o block
+            solution.paths[path_id] = (
+                path[:info.sequence[d_block[0]].index] 
+                + o_block 
+                + path[info.sequence[d_block[-1]].index + 1: info.sequence[o_block[0]].index] 
+                + d_block
+                + path[info.sequence[o_block[-1]].index + 1:]
+                )
+            for seq_idx, n in enumerate(solution.paths[path_id]):
+                info.sequence[n] = types.SequenceInfo(sequence=path_id, index=seq_idx)
+            
+            return solution, min_delta, label
+
 
 class RandomSameBlockExchangeOperator(Operator):
     def __init__(self, change_percentage: Union[int, float] = 0.1):
@@ -1494,6 +1765,331 @@ def _compute_delta_pair_exchange(o1: Node, o2: Node, path: MultiODPath):
 
     delta = after - before
     label = o1.node_id, o2.node_id
+    return delta, label
+
+
+def _compute_delta_pair_exchange_v2(o1: int, o2: int, info: types.ProblemInfo, path: types.Path):
+    label, delta = None, 0.
+
+    d1, d2 = info.od_pairing[o1], info.od_pairing[o2]
+    if info.sequence[o1].index > info.sequence[o2].index:
+        o_f, o_s = o2, o1 
+    else:
+        o_f, o_s = o1, o2 
+    if info.sequence[d1].index > info.sequence[d2].index:
+        d_f, d_s = d2, d1 
+    else:
+        d_f, d_s = d1, d2 
+    
+    o_f_nseq, o_s_nseq, d_f_nseq = info.sequence[o_f].index + 1, info.sequence[o_s].index + 1, info.sequence[d_f].index + 1
+    o_s_seq, d_f_seq, d_s_seq = info.sequence[o_s].index, info.sequence[d_f].index, info.sequence[d_s].index
+    o_f_prev, o_f_next = path[info.sequence[o_f].index - 1], path[o_f_nseq]
+    o_s_prev, o_s_next = path[info.sequence[o_s].index - 1], path[o_s_nseq]
+    d_f_prev, d_f_next = path[info.sequence[d_f].index - 1], path[d_f_nseq]
+    d_s_prev, d_s_next = path[info.sequence[d_s].index - 1], path[info.sequence[d_s].index + 1]
+    
+    o_fs_is_neighbor, od_sf_is_neighbor, d_sf_is_neighbor = o_f_nseq == o_s_seq, o_s_nseq == d_f_seq, d_f_nseq == d_s_seq
+    od_f_is_neighbor, do_fs_is_neighbor, od_s_is_neighbor = o_f_nseq == d_f_seq, d_f_nseq == o_s_seq, o_s_nseq == d_s_seq
+
+    if o_s_seq < d_f_seq:
+        # Of,Os,...,Df,...,Ds
+        if o_fs_is_neighbor and not od_sf_is_neighbor and not d_sf_is_neighbor:
+            before = (
+                info.distance_matrix[o_f_prev, o_f]
+                + info.distance_matrix[o_s_next, o_s]
+                + info.distance_matrix[d_f_prev, d_f]
+                + info.distance_matrix[d_f_next, d_f]
+                + info.distance_matrix[d_s_prev, d_s]
+                + info.distance_matrix[d_s_next, d_s]
+            )
+            after = (
+                info.distance_matrix[o_f_prev, o_s]
+                + info.distance_matrix[o_s_next, o_f]
+                + info.distance_matrix[d_f_prev, d_s]
+                + info.distance_matrix[d_f_next, d_s]
+                + info.distance_matrix[d_s_prev, d_f]
+                + info.distance_matrix[d_s_next, d_f]
+            )
+        
+        # Of,Os,...,Df,Ds
+        elif o_fs_is_neighbor and not od_sf_is_neighbor and d_sf_is_neighbor:
+            before = (
+                info.distance_matrix[o_f_prev, o_f]
+                + info.distance_matrix[o_s_next, o_s]
+                + info.distance_matrix[d_f_prev, d_f]
+                + info.distance_matrix[d_s_next, d_s]
+            )
+            after = (
+                info.distance_matrix[o_f_prev, o_s]
+                + info.distance_matrix[o_s_next, o_f]
+                + info.distance_matrix[d_f_prev, d_s]
+                + info.distance_matrix[d_s_next, d_f]
+            )
+
+        # Of,Os,Df,Ds
+        elif o_fs_is_neighbor and od_sf_is_neighbor and d_sf_is_neighbor:
+            before = (
+                info.distance_matrix[o_f_prev, o_f]
+                + info.distance_matrix[o_s, d_f]
+                + info.distance_matrix[d_s_next, d_s]
+            ) 
+            after = (
+                info.distance_matrix[o_f_prev, o_s]
+                + info.distance_matrix[o_f, d_s]
+                + info.distance_matrix[d_s_next, d_f]
+            )
+
+        # Of,Os,Df,...,Ds
+        elif o_fs_is_neighbor and od_sf_is_neighbor and not d_sf_is_neighbor:
+            before = (
+                info.distance_matrix[o_f_prev, o_f]
+                + info.distance_matrix[o_s, d_f]
+                + info.distance_matrix[d_f_next, d_f]
+                + info.distance_matrix[d_s_prev, d_s]
+                + info.distance_matrix[d_s_next, d_s]
+            ) 
+            after = (
+                info.distance_matrix[o_f_prev, o_s]
+                + info.distance_matrix[o_f, d_s]
+                + info.distance_matrix[d_f_next, d_s]
+                + info.distance_matrix[d_s_prev, d_f]
+                + info.distance_matrix[d_s_next, d_f]
+            )
+
+        # Of,...,Os,...,Df,...,Ds
+        elif not o_fs_is_neighbor and not od_sf_is_neighbor and not d_sf_is_neighbor:
+            before = (
+                info.distance_matrix[o_f_prev, o_f]
+                + info.distance_matrix[o_f_next, o_f]
+                + info.distance_matrix[o_s_prev, o_s]
+                + info.distance_matrix[o_s_next, o_s]
+                + info.distance_matrix[d_f_prev, d_f]
+                + info.distance_matrix[d_f_next, d_f]
+                + info.distance_matrix[d_s_prev, d_s]
+                + info.distance_matrix[d_s_next, d_s]
+            ) 
+            after = (
+                info.distance_matrix[o_f_prev, o_s]
+                + info.distance_matrix[o_f_next, o_s]
+                + info.distance_matrix[o_s_prev, o_f]
+                + info.distance_matrix[o_s_next, o_f]
+                + info.distance_matrix[d_f_prev, d_s]
+                + info.distance_matrix[d_f_next, d_s]
+                + info.distance_matrix[d_s_prev, d_f]
+                + info.distance_matrix[d_s_next, d_f]
+            )
+
+        # Of,...,Os,...,Df,Ds
+        elif not o_fs_is_neighbor and not od_sf_is_neighbor and d_sf_is_neighbor:
+            before = (
+                info.distance_matrix[o_f_prev, o_f]
+                + info.distance_matrix[o_f_next, o_f]
+                + info.distance_matrix[o_s_prev, o_s]
+                + info.distance_matrix[o_s_next, o_s]
+                + info.distance_matrix[d_f_prev, d_f]
+                + info.distance_matrix[d_s_next, d_s]
+            ) 
+            after = (
+                info.distance_matrix[o_f_prev, o_s]
+                + info.distance_matrix[o_f_next, o_s]
+                + info.distance_matrix[o_s_prev, o_f]
+                + info.distance_matrix[o_s_next, o_f]
+                + info.distance_matrix[d_f_prev, d_s]
+                + info.distance_matrix[d_s_next, d_f]
+            ) 
+
+        # Of,...,Os,Df,Ds
+        elif not o_fs_is_neighbor and od_sf_is_neighbor and d_sf_is_neighbor:
+            before = (
+                info.distance_matrix[o_f_prev, o_f]
+                + info.distance_matrix[o_f_next, o_f]
+                + info.distance_matrix[o_s_prev, o_s]
+                + info.distance_matrix[o_s, d_f]
+                + info.distance_matrix[d_s_next, d_s]
+            ) 
+            after = (
+                info.distance_matrix[o_f_prev, o_s]
+                + info.distance_matrix[o_f_next, o_s]
+                + info.distance_matrix[o_s_prev, o_f]
+                + info.distance_matrix[o_f, d_s]
+                + info.distance_matrix[d_s_next, d_f]
+            )
+
+        # Of,...,Os,Df,...,Ds
+        elif not o_fs_is_neighbor and od_sf_is_neighbor and not d_sf_is_neighbor:
+            before = (
+                info.distance_matrix[o_f_prev, o_f]
+                + info.distance_matrix[o_f_next, o_f]
+                + info.distance_matrix[o_s_prev, o_s]
+                + info.distance_matrix[o_s, d_f]
+                + info.distance_matrix[d_f_next, d_f]
+                + info.distance_matrix[d_s_prev, d_s]
+                + info.distance_matrix[d_s_next, d_s]
+            ) 
+            after = (
+                info.distance_matrix[o_f_prev, o_s]
+                + info.distance_matrix[o_f_next, o_s]
+                + info.distance_matrix[o_s_prev, o_f]
+                + info.distance_matrix[o_f, d_s]
+                + info.distance_matrix[d_f_next, d_s]
+                + info.distance_matrix[d_s_prev, d_f]
+                + info.distance_matrix[d_s_next, d_f]
+            ) 
+    else:
+        # Of,Df,Os,Ds
+        if od_f_is_neighbor and do_fs_is_neighbor and od_s_is_neighbor:
+            before = (
+                info.distance_matrix[o_f_prev, o_f]
+                + info.distance_matrix[o_s, d_f]
+                + info.distance_matrix[d_s_next, d_s]
+            ) 
+            after = (
+                info.distance_matrix[o_f_prev, o_s]
+                + info.distance_matrix[o_f, d_s]
+                + info.distance_matrix[d_s_next, d_f]
+            )
+
+        # Of,...,Df,Os,Ds
+        elif not od_f_is_neighbor and do_fs_is_neighbor and od_s_is_neighbor:
+            before = (
+                info.distance_matrix[o_f_prev, o_f]
+                + info.distance_matrix[o_f_next, o_f]
+                + info.distance_matrix[d_f_prev, d_f]
+                + info.distance_matrix[d_f, o_s]
+                + info.distance_matrix[o_s, d_s]
+                + info.distance_matrix[d_s_next, d_s]
+            ) 
+            after = (
+                info.distance_matrix[o_f_prev, o_s]
+                + info.distance_matrix[o_f_next, o_s]
+                + info.distance_matrix[d_f_prev, d_s]
+                + info.distance_matrix[d_f, o_f]
+                + info.distance_matrix[o_f, d_s]
+                + info.distance_matrix[d_s_next, d_f]
+            )
+
+        # Of,...,Df,...,Os,Ds
+        elif not od_f_is_neighbor and not do_fs_is_neighbor and od_s_is_neighbor:
+            before = (
+                info.distance_matrix[o_f_prev, o_f]
+                + info.distance_matrix[o_f_next, o_f]
+                + info.distance_matrix[d_f_prev, d_f]
+                + info.distance_matrix[d_f_next, d_f]
+                + info.distance_matrix[o_s_prev, o_s]
+                + info.distance_matrix[o_s, d_s]
+                + info.distance_matrix[d_s_next, d_s]
+            ) 
+            after = (
+                info.distance_matrix[o_f_prev, o_s]
+                + info.distance_matrix[o_f_next, o_s]
+                + info.distance_matrix[d_f_prev, d_s]
+                + info.distance_matrix[d_f_next, d_s]
+                + info.distance_matrix[o_s_prev, o_f]
+                + info.distance_matrix[o_f, d_f]
+                + info.distance_matrix[d_s_next, d_f]
+            )  
+
+        # Of,...,Df,...,Os,...,Ds
+        elif not od_f_is_neighbor and not do_fs_is_neighbor and not od_s_is_neighbor:
+            before = (
+                info.distance_matrix[o_f_prev, o_f]
+                + info.distance_matrix[o_f_next, o_f]
+                + info.distance_matrix[o_s_prev, o_s]
+                + info.distance_matrix[o_s_next, o_s]
+                + info.distance_matrix[d_f_prev, d_f]
+                + info.distance_matrix[d_f_next, d_f]
+                + info.distance_matrix[d_s_prev, d_s]
+                + info.distance_matrix[d_s_next, d_s]
+            ) 
+            after = (
+                info.distance_matrix[o_f_prev, o_s]
+                + info.distance_matrix[o_f_next, o_s]
+                + info.distance_matrix[o_s_prev, o_f]
+                + info.distance_matrix[o_s_next, o_f]
+                + info.distance_matrix[d_f_prev, d_s]
+                + info.distance_matrix[d_f_next, d_s]
+                + info.distance_matrix[d_s_prev, d_f]
+                + info.distance_matrix[d_s_next, d_f]
+            )
+
+        # Of,Df,...,Os,Ds
+        elif od_f_is_neighbor and not do_fs_is_neighbor and od_s_is_neighbor:
+            before = (
+                info.distance_matrix[o_f_prev, o_f]
+                + info.distance_matrix[d_f_next, d_f]
+                + info.distance_matrix[o_s_prev, o_s]
+                + info.distance_matrix[d_s_next, d_s]
+            )
+            after = (
+                info.distance_matrix[o_f_prev, o_s]
+                + info.distance_matrix[d_f_next, d_s]
+                + info.distance_matrix[o_s_prev, o_f]
+                + info.distance_matrix[d_s_next, d_f]
+            )
+
+        # Of,Df,...,Os,...,Ds
+        elif od_f_is_neighbor and not do_fs_is_neighbor and not od_s_is_neighbor:
+            before = (
+                info.distance_matrix[o_f_prev, o_f]
+                + info.distance_matrix[o_f, d_f]
+                + info.distance_matrix[d_f_next, d_f]
+                + info.distance_matrix[o_s_prev, o_s]
+                + info.distance_matrix[o_s_next, o_s]
+                + info.distance_matrix[d_s_prev, d_s]
+                + info.distance_matrix[d_s_next, d_s]
+            )
+            after = (
+                info.distance_matrix[o_f_prev, o_s]
+                + info.distance_matrix[o_s, d_s]
+                + info.distance_matrix[d_f_next, d_s]
+                + info.distance_matrix[o_s_prev, o_f]
+                + info.distance_matrix[o_s_next, o_f]
+                + info.distance_matrix[d_s_prev, d_f]
+                + info.distance_matrix[d_s_next, d_f]
+            )
+
+        # Of,Df,Os,...,Ds
+        elif od_f_is_neighbor and do_fs_is_neighbor and not od_s_is_neighbor:
+            before = (
+                info.distance_matrix[o_f_prev, o_f]
+                + info.distance_matrix[o_f, d_f]
+                + info.distance_matrix[o_s, d_f]
+                + info.distance_matrix[o_s_next, o_s]
+                + info.distance_matrix[d_s_prev, d_s]
+                + info.distance_matrix[d_s_next, d_s]
+            ) 
+            after = (
+                info.distance_matrix[o_f_prev, o_s]
+                + info.distance_matrix[o_f, d_s]
+                + info.distance_matrix[o_s, d_s]
+                + info.distance_matrix[o_s_next, o_f]
+                + info.distance_matrix[d_s_prev, d_f]
+                + info.distance_matrix[d_s_next, d_f]
+            )
+
+        # Of,...,Df,Os,...,Ds
+        elif not od_f_is_neighbor and do_fs_is_neighbor and not od_s_is_neighbor:
+            before = (
+                info.distance_matrix[o_f_prev, o_f]
+                + info.distance_matrix[o_f_next, o_f]
+                + info.distance_matrix[d_f_prev, d_f]
+                + info.distance_matrix[o_s, d_f]
+                + info.distance_matrix[o_s_next, o_s]
+                + info.distance_matrix[d_s_prev, d_s]
+                + info.distance_matrix[d_s_next, d_s]
+            ) 
+            after = (
+                info.distance_matrix[o_f_prev, o_s]
+                + info.distance_matrix[o_f_next, o_s]
+                + info.distance_matrix[d_f_prev, d_s]
+                + info.distance_matrix[o_f, d_s]
+                + info.distance_matrix[o_s_next, o_f]
+                + info.distance_matrix[d_s_prev, d_f]
+                + info.distance_matrix[d_s_next, d_f]
+            ) 
+
+    delta = after - before
+    label = o1, o2
     return delta, label
 
 

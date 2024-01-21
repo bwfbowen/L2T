@@ -2,6 +2,8 @@ from typing import Dict, List, Callable, NamedTuple
 from abc import abstractmethod
 
 import time
+import copy 
+import random 
 import numpy as np
 import gymnasium as gym 
 
@@ -289,10 +291,14 @@ class DMultiODEnv(dm_env.Environment):
         self, 
         problem: od_problem.MultiODProblemV2 = None,
         candidate_actions: List[Callable] = None,
+        random_actions: List[Callable] = None,
         initial_strategy: str = '1by1',
         k_recent_action: int = 10,
         max_no_improvement: int = 6,
         max_steps: int = int(4e4),
+        num_action_iters: int = 10,
+        change_pct: float = 0.1,
+        best_cost_tolerance: float = 0.01,
         *,
         num_nodes: int = 21,
         locations: Dict = None,
@@ -303,15 +309,16 @@ class DMultiODEnv(dm_env.Environment):
     ):
         super().__init__()
         self._problem = problem if problem is not None else od_problem.MultiODProblemV2(num_nodes, locations, seed, ignore_from_dummy_cost, ignore_to_dummy_cost, int_distance)
-        self._actions = candidate_actions or ads.get_default_candidate_actions_v2()
-        self.num_actions = len(candidate_actions)
-        self.observation_space = self.observation_spec()
-        self._obs = np.zeros(self.observation_space.shape, dtype=self.observation_space.dtype)
-        self._raw_node_obs = np.zeros((len(self._problem.locations) - 1, 12), dtype=np.float32)
-        self._reset_next_step = True
-        self._initial_startegy = initial_strategy
+        self._actions = candidate_actions or ads.get_default_candidate_actions_v2(num_action_iters)
+        self._random_actions = random_actions or ads.get_default_random_actions_v2(change_pct)
+        self.num_actions = len(self._actions)
         self._k_recent_action = k_recent_action
         self._max_no_improvement = max_no_improvement
+        self._best_cost_tolerance = best_cost_tolerance
+
+        self._reset_next_step = True
+        self._initial_startegy = initial_strategy
+        
         self._env_state = types.EnvState(
             problem=self._problem.info,
             action_history=np.zeros((self._k_recent_action, 2), dtype=np.float32))
@@ -319,14 +326,20 @@ class DMultiODEnv(dm_env.Environment):
         self._current_cost = 0.
         self._max_steps = max_steps
         self._current_step = 0
+
+        self.observation_space = self.observation_spec()
+        self._obs = np.zeros(self.observation_space.shape, dtype=self.observation_space.dtype)
+        self._raw_node_obs = np.zeros((len(self._problem.info.locations) - 1, 12), dtype=np.float32)
     
     def _init_solution(self):
         if self._initial_startegy == '1by1':
-            paths = [[node for item in self._problem.od_pairing.items() if self._problem.od_type[item[0]] == 0 for node in item]]
-            sol = solution.MultiODSolutionV2(paths, self._problem)
+            info = self._problem.info 
+            paths = [[0] + [node for item in info.od_pairing.items() if info.od_type[item[0]] == 0 for node in item] + [0]]
+            sol = solution.MultiODSolutionV2(paths, info)
             self._current_cost = self._problem.calc_cost(sol)
+            self._init_cost = self._current_cost
             self._best_sol = types.BestSol(
-                paths=sol.paths,
+                paths=copy.deepcopy(sol.paths),
                 best_cost=self._current_cost,
                 best_step=0)
             self._env_state = types.EnvState(
@@ -342,9 +355,10 @@ class DMultiODEnv(dm_env.Environment):
             seq_i = info.sequence[i]
             path = paths[seq_i.sequence]
             prev_, next_ = path[seq_i.index - 1], path[seq_i.index + 1]
-            self._raw_node_obs[i, :6] = info.locations[[prev_, i, next_]]
-            self._raw_node_obs[i, 6:9] = info.distance_matrix[[prev_, i, next_], [i, next_, prev_]]
-            self._raw_node_obs[i, 9:12] = info.od_type[[prev_, i, next_]]
+            _non_i = i - 1
+            self._raw_node_obs[_non_i, :6] = info.locations[[prev_, i, next_]].flatten()
+            self._raw_node_obs[_non_i, 6:9] = info.distance_matrix[[prev_, i, next_], [i, next_, prev_]].flatten()
+            self._raw_node_obs[_non_i, 9:12] = [info.od_type[prev_], info.od_type[i], info.od_type[next_]]
         num_non_depot_nodes = len(info.locations) - 1
         node_dim = num_non_depot_nodes * 12
         action_history_dim = node_dim + 2 * self._k_recent_action
@@ -357,6 +371,18 @@ class DMultiODEnv(dm_env.Environment):
             self._env_state.improvement.no_improvement]
         return self._obs
 
+    def _regenerate_feasible_solution_with_random_actions(self):
+        old_cost = self._current_cost
+        if not old_cost / self._best_sol.best_cost < 1 + self._best_cost_tolerance:
+            _best_solution = solution.MultiODSolutionV2(
+                paths=copy.deepcopy(self._best_sol.paths),
+                problem_info=self._problem.info)
+            self.solution = _best_solution
+        # random disturb
+        ra = random.choice(self._random_actions)    
+        self.solution, _ = ra(self)
+        return self.solution
+    
     def reset(self):
         self._reset_next_step = False 
         self.solution = self._init_solution()
@@ -367,26 +393,36 @@ class DMultiODEnv(dm_env.Environment):
     def step(self, action):
         if self._reset_next_step:
             return self.reset()
-        self.solution, delta, _ = self._actions[action](self.solution)
+        no_improvement = self._env_state.improvement.no_improvement
+        if no_improvement >= self._max_no_improvement:
+            self.solution = self._regenerate_feasible_solution_with_random_actions()
+            no_improvement = 0
+        self.solution, delta = self._actions[action](self)
+        # test feasibility
+        if not self._problem.is_feasible(self.solution):
+            raise ValueError(f'infeasible solution from action {action}: {self._actions[action]}.')
         self._current_step += 1
         self._current_cost = self._problem.calc_cost(self.solution)
         best_cost = self._best_sol.best_cost
         delta_best = self._current_cost - best_cost
         action_history = self._env_state.action_history
         action_history[:-1] = action_history[1:]
-        action_history[-1, 0] = [action, np.sign(delta)]
-        reward = -delta 
+        action_history[-1, :] = [action, np.sign(delta)]
+        # decision 1: at each step
+        # reward = -delta 
+        # decision 2: sparse at terminal step
         if self._current_cost < best_cost:
             self._best_sol = types.BestSol(
                 paths=self.solution.paths,
                 best_cost=self._current_cost,
                 best_step=self._current_step)
         done = self._current_step >= self._max_steps
-        no_improvement = self._env_state.improvement.no_improvement
+        
         if delta >= -EPSILON:
             no_improvement += 1
         else:
             no_improvement = 0
+        
         # update state
         self._env_state = types.EnvState(
             problem=self.solution.info,
@@ -398,12 +434,18 @@ class DMultiODEnv(dm_env.Environment):
         observation = self._observe(self.solution)
         if done:
             self._reset_next_step = True 
-            return dm_env.termination(reward, observation)
+            # normalize improvement
+            reward = (self._init_cost - self._best_sol.best_cost) / self._init_cost
+            # faster the better
+            reward *= 1 + np.log10(self._max_steps / self._best_sol.best_step) 
+            return dm_env.termination(
+                reward=reward, 
+                observation=observation)
         else:
-            dm_env.transition(reward, observation)
+            return dm_env.transition(reward=0., observation=observation)
 
     def observation_spec(self):
-        num_non_depot_nodes = len(self._problem.locations) - 1
+        num_non_depot_nodes = len(self._problem.info.locations) - 1
         total_dim = num_non_depot_nodes * 12 + 2 * self._k_recent_action + 3
         minimum = (
             [0] * num_non_depot_nodes * 9 
@@ -415,7 +457,7 @@ class DMultiODEnv(dm_env.Environment):
         maximum = (
             [np.inf] * num_non_depot_nodes * 9
             + [1] * num_non_depot_nodes * 3
-            + [len(self.num_actions)] * self._k_recent_action
+            + [self.num_actions] * self._k_recent_action
             + [1] * self._k_recent_action
             + [np.inf] * 2
             + [self._max_no_improvement])

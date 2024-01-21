@@ -810,13 +810,13 @@ class MultiODSolution(Solution):
 class MultiODSolutionV2:
     def __init__(
         self, 
-        paths: List[List], 
+        paths: List[types.Path], 
         problem_info: types.ProblemInfo = None
     ) -> None:
         self._paths = paths 
         self._problem = problem_info._replace(sequence=self._generate_sequence_info(self.paths))
 
-    def _generate_sequence_info(paths: List[List]) -> Dict[int, types.SequenceInfo]:
+    def _generate_sequence_info(self, paths: List[List]) -> Dict[int, types.SequenceInfo]:
         sequence_info = {}
         for path_idx, path in enumerate(paths):
             for seq_idx, element in enumerate(path):

@@ -3,8 +3,23 @@ from . import actions
 from . import operators
 
 
-def get_default_candidate_actions_v2() -> List[actions.Action]:
-    return []
+def get_default_candidate_actions_v2(num_iters: int) -> List[actions.Action]:
+    return [
+         actions.PathActionV2(0, operator=operators.ExchangeOperatorV2(), num_iters=num_iters),
+         actions.PathActionV2(1, operator=operators.InsertOperatorV2(), num_iters=num_iters),
+         actions.PathActionV2(2, operator=operators.SegmentTwoOptOperatorV2(), num_iters=num_iters),
+         actions.PathActionV2(3, operator=operators.ODPairsExchangeOperatorV2(), num_iters=num_iters),
+         actions.PathActionV2(4, operator=operators.TwoKOptOperatorV2(), num_iters=num_iters),
+         actions.PathActionV2(5, operator=operators.MixedBlockExchangeOperatorV2(), num_iters=num_iters),
+    ]
+
+
+def get_default_random_actions_v2(change_pct: float = 0.1) -> List[actions.PathRandomActionV2]:
+     return [
+          actions.PathRandomActionV2(6, operator=operators.RandomODPairsExchangeOperatorV2(change_pct)),
+          actions.PathRandomActionV2(7, operator=operators.RandomOForwardOperatorV2(change_pct)),
+          actions.PathRandomActionV2(8, operator=operators.RandomDBackwardOperatorV2(change_pct)),
+     ]
 
 def get_default_action_dict(env_instance):
     _actions = [ 

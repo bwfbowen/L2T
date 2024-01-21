@@ -1,8 +1,8 @@
-from typing import Dict
+from typing import Dict, Union
 import copy 
 import random
 from itertools import product, chain 
-import functools
+import collections
 import numpy as np
 
 from src import solution
@@ -282,29 +282,33 @@ class MultiODProblemV2(Problem):
                 cost += self._info.distance_matrix[path[idx], path[idx + 1]]
         return cost
     
-    def is_feasible(self, paths: solution.MultiODSolutionV2):
-        if not isinstance(paths, solution.MultiODSolutionV2):
-            paths = solution.MultiODSolutionV2(paths, self.info)
+    def is_feasible(self, sol_or_paths: Union[solution.MultiODSolutionV2, types.Path]):
+        if not isinstance(sol_or_paths, solution.MultiODSolutionV2):
+            sol = solution.MultiODSolutionV2(sol_or_paths, self.info)
+        else:
+            sol = sol_or_paths
+        paths = sol.paths
         
         # Check each node appears exactly once
         # except 0, which is the depot node
-        counter = functools.Counter(chain(*paths.paths))
+        counter = collections.Counter(chain(*paths))
         if not all(count == 1 for key, count in counter.items() if key != 0):
             return False 
         
         for path in paths:
             for idx, node in enumerate(path):
                 # Check each path starts and ends at depot 
-                if idx == 0 or idx == len(path) - 1 and node != 0:
-                    return False 
-                # constraint 1: the OD pair should appear in the same path
-                node_paired = paths.info.od_pairing[node]
-                if paths.info.sequence[node].sequence != paths.info.sequence[node_paired].sequence:
-                    return False 
-                # constraint 2: O should appear before D
-                if node in self.OD_mapping and path.indexof(node) >= path.indexof(self.OD_mapping[node]):
-                    solution.set_is_valid(False, self)
-                    return False 
+                if idx == 0 or idx == len(path) - 1:
+                    if node != 0:
+                        return False 
+                else:
+                    # constraint 1: the OD pair should appear in the same path
+                    node_paired = sol.info.od_pairing[node]
+                    if sol.info.sequence[node].sequence != sol.info.sequence[node_paired].sequence:
+                        return False 
+                    # constraint 2: O should appear before D
+                    if sol.info.od_type[node] == 0 and sol.info.sequence[node].index >= sol.info.sequence[node_paired].index:
+                        return False 
         return True
 
     @property

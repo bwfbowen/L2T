@@ -243,6 +243,21 @@ def get_lkh3_tour(tour_path):
     return tour 
 
 
+def get_lkh3_tour_v2(tour_path):
+    with open(tour_path) as f:
+        while line := f.readline():
+            if line.rstrip() == 'TOUR_SECTION':
+                tour_before_mapping = []
+                while (node := f.readline().rstrip()) != '-1':
+                    tour_before_mapping.append(int(node))
+    _node_reorder = [1, 2] + [i for i in range(1, len(tour_before_mapping) + 1) if i > 2 and i % 2 != 0] + [i for i in range(1, len(tour_before_mapping) + 1) if i > 2 and i % 2 == 0]
+    node_index_mapping = {old_index: new_index for new_index, old_index in enumerate(_node_reorder, start=-1)}
+    tour_before_reverse = [node_index_mapping[old_index] for old_index in tour_before_mapping if old_index > 1]  # two dummy nodes at the same location
+    subtour_to_reverse = tour_before_reverse[1:]
+    tour = tour_before_reverse[:1] + subtour_to_reverse[::-1] + [0]
+    return tour 
+
+
 def get_ortools_tour(tour_path, skip_first_lines: int = 2, num_taxi: int = 1, include_taxi_node: bool = True):
     with open(tour_path) as f:
         for _ in range(skip_first_lines):
