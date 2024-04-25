@@ -1,5 +1,6 @@
-from typing import Dict, NamedTuple, List
+from typing import Dict, NamedTuple, List, Any
 import numpy as np
+import dm_env
 
 
 Path = List[int]
@@ -33,3 +34,8 @@ class EnvState(NamedTuple):
     problem: ProblemInfo = None
     action_history: np.ndarray = None   
     improvement: Improvement = None  
+
+
+class ObservationExtras(NamedTuple):
+    node_features: np.ndarray
+    operator_features: np.ndarray
